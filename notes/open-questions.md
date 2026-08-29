@@ -29,6 +29,16 @@ Running list. Add freely; mark ones that become experiments with their experimen
 - Is there a benchmark for *knowing when to stop*? Over-eagerness and premature handoff are the two failure
   modes most visible in practice and least represented in scores.
 
+## Notes and memory as experimental objects
+- Does handoff-note *format* change downstream agent accuracy? Fix a task, have A write a note under
+  format F, have B continue from the note alone, sweep F. See `2026-08-29-benchmark-vs-instrument.md`.
+- Hypothesis: recording **rejected alternatives** is the highest-value part of a note, because it is
+  what prevents a re-derivation loop — and it is what every summarizer drops first. Compaction is lossy
+  in a biased direction: it keeps conclusions and discards the search that produced them.
+- Does an agent reading a note reconstruct the *reasoning* or only the *conclusion*? Testable by asking
+  the reader to defend the decision against the counterargument that was originally raised against it.
+- Is there an optimal note length, or does it depend on how far downstream the reader is?
+
 ## Speculative / cross-domain
 - Agent workflows as a scheduling problem: does anything from operations research (critical path, queueing)
   predict where multi-agent pipelines stall?
