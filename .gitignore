@@ -1,5 +1,6 @@
 # Run artifacts — traces are large and regenerable; keep summaries, not raw dumps.
 results/**/raw/
+results/smoke*.jsonl
 *.jsonl.gz
 
 # Python
