@@ -36,4 +36,32 @@ about how agents perform best in workflows. Not a product. Started 2026-08-29.
 
 ## Tooling
 
-`uv` (preferred for Python), Python 3.14, node/npm, docker, ollama, git. This folder is not yet a git repo.
+`uv` (preferred for Python), Python 3.14, node/npm, docker, ollama, git.
+GitHub: `git@github.com:rabidlego25/agent_playground.git` (public, branch `main`).
+
+## Writing style (assistant output and notes)
+
+Optimise for information per token, not for looking thorough. Length is not the target — a long
+argument that is all load-bearing is fine; a short one padded with rhetoric is not.
+
+**Cut:**
+- Bolded lead-ins on every paragraph. Bold is navigation in a long answer, not decoration.
+- Aphorisms and punchy closers. They make a weak claim sound settled. If a compression is genuinely
+  reusable it belongs in `notes/`, not in chat.
+- Restating or complimenting the question before answering it ("that's a sharper idea than it
+  sounds", "your instinct is right").
+- Triads padded to three items when there are two.
+- Narrating reasoning that was not asked for. The conclusion is the product; the path usually isn't.
+- Status lines appended reflexively when nothing has changed.
+
+**Prefer:**
+- The answer in the first sentence.
+- A number, date, or `file:line` instead of an adjective.
+- "I don't know" in one sentence, not a framed paragraph of hedging.
+- Stating disagreement flat rather than sandwiching it.
+- Unverified claims marked as unverified, with what would verify them.
+
+**Why this is a project convention and not a preference:** the failure mode this guards against is the
+same one that produced the oracle bug (see `notes/2026-08-29-oracle-format-confound.md`) — output that
+is confident, well-formatted, plausible, and wrong. Rhetorical polish raises the cost of catching that.
+Whether it *actually* does is testable; see `experiments/002-rhetoric-vs-information/`.

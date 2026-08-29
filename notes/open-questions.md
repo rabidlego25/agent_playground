@@ -38,6 +38,8 @@ Running list. Add freely; mark ones that become experiments with their experimen
 - Does an agent reading a note reconstruct the *reasoning* or only the *conclusion*? Testable by asking
   the reader to defend the decision against the counterargument that was originally raised against it.
 - Is there an optimal note length, or does it depend on how far downstream the reader is?
+- Does rhetorical confidence lower a reader agent's rate of catching a false claim, at equal
+  information content? If so, style is a safety property, not taste. See `experiments/002-rhetoric-vs-information/`.
 
 ## Speculative / cross-domain
 - Agent workflows as a scheduling problem: does anything from operations research (critical path, queueing)
