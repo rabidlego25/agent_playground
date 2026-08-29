@@ -3,6 +3,10 @@
 Running list. Add freely; mark ones that become experiments with their experiment id.
 
 ## Configuration
+- **[001]** Does pre-task communication between agents beat a single agent? Standing user question.
+  The control that matters is k independent samples that never communicate — see
+  `2026-08-29-starting-point-decision.md`. Note this is *not* the same as role decomposition:
+  it varies deliberation, holding the agent set fixed.
 - Does role specialization (planner / executor / critic) beat one strong model with the same total token budget?
   Token-matched comparison is the only fair version of this question, and almost nobody runs it that way.
 - What is the actual marginal value of a critic pass? Hypothesis: it helps on tasks with a verifiable oracle
