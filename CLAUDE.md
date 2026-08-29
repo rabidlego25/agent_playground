@@ -1,4 +1,4 @@
-# agent_research
+# agent_playground
 
 A long-term scratchpad for empirical work on agentic systems: testing agent
 configurations, analyzing and building benchmarks, and pushing on novel ideas
