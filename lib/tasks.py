@@ -32,6 +32,10 @@ class Task:
     check: Callable[[str], bool]         # the oracle: does this answer satisfy the task?
     answer: Any = None                   # ground truth, for analysis -- never shown to the model
     difficulty: dict[str, Any] = field(default_factory=dict)
+    extract: Callable[[str], tuple[str, bool]] | None = None   # -> (choice, format_ok)
+
+    def parse(self, raw: str) -> tuple[str, bool]:
+        return self.extract(raw) if self.extract else (_tail_token(raw), True)
 
     def scored(self, raw: str) -> bool:
         try:
@@ -46,6 +50,49 @@ def _tail_token(text: str) -> str:
     if not lines:
         return ""
     return lines[-1].strip("*`_ .").removeprefix("ANSWER:").removeprefix("Answer:").strip()
+
+
+
+def extract_choice(raw: str, candidates: list[str]) -> tuple[str, bool]:
+    """Pull an answer out of a response, and say whether the model obeyed the format.
+
+    Free-form extraction is where evals quietly go wrong: score the last line verbatim and
+    a model that narrates ("...is Altair.") reads as catastrophically worse than one that
+    complies, so the comparison measures instruction-following instead of reasoning. So
+    tasks ask for a delimited `ANSWER: x` line, and this returns (choice, format_ok):
+
+      - strict  -- an `ANSWER:` line whose value is a valid candidate  -> format_ok True
+      - lenient -- otherwise, the last candidate named anywhere        -> format_ok False
+
+    Report both. The lenient path is still ambiguous for answer-first phrasings
+    ("Sable is one level above Quill" extracts Quill), which is exactly why non-compliance
+    is recorded rather than silently absorbed into the accuracy number.
+    """
+    text = str(raw)
+    lowered = {c.lower(): c for c in candidates}
+
+    field = None
+    for m in re.finditer(r"ANSWER\s*[:\-]\s*(.+)", text, re.I):
+        field = m.group(1)
+    if field is not None:
+        v = field.strip().strip("*`_ .,!\"'")
+        if v.lower() in lowered:
+            return lowered[v.lower()], True
+
+    tail = _tail_token(text)
+    if tail.lower() in lowered:
+        return lowered[tail.lower()], True
+
+    def last_hit(scope: str) -> str | None:
+        hits = [(m.start(), m.group(0)) for c in candidates
+                for m in re.finditer(rf"\b{re.escape(c)}\b", scope, re.I)]
+        return lowered[max(hits)[1].lower()] if hits else None
+
+    for scope in (tail, text):
+        hit = last_hit(scope)
+        if hit is not None:
+            return hit, False
+    return tail, False
 
 
 # --------------------------------------------------------------------------- family 1
@@ -102,16 +149,36 @@ def assignment_puzzle(seed: int, n: int = 4) -> Task:
         f"{n} people live in houses numbered 1 to {n}, one person per house.\n"
         + "\n".join(f"- {t}" for t in chosen_txt)
         + f"\n\nWhich house does {target} live in? "
-        f"Reply with the house number alone on the final line."
+        f"End your reply with a final line of the form `ANSWER: <number>`."
     )
     gold = pos[target]
 
+    def extract(raw: str) -> tuple[str, bool]:
+        text = str(raw)
+        field = None
+        for m in re.finditer(r"ANSWER\s*[:\-]\s*(-?\d+)", text, re.I):
+            field = m.group(1)
+        if field is not None:
+            return field, True
+        tail = _tail_token(text)
+        if tail.isdigit():
+            return tail, True
+        for scope in (tail, text):
+            m = re.findall(r"-?\d+", scope)
+            if m:
+                return m[-1], False
+        return tail, False
+
     def check(raw: str) -> bool:
-        m = re.findall(r"-?\d+", _tail_token(raw))
-        return bool(m) and int(m[-1]) == gold
+        c, _ = extract(raw)
+        try:
+            return int(c) == gold
+        except ValueError:
+            return False
 
     return Task(f"assign-{n}-{seed}", "assignment_puzzle", seed, prompt, check,
-                answer=gold, difficulty={"n": n, "constraints": len(chosen_txt)})
+                answer=gold, difficulty={"n": n, "constraints": len(chosen_txt)},
+                extract=extract)
 
 
 # --------------------------------------------------------------------------- family 2
@@ -190,16 +257,22 @@ def multi_hop(seed: int, depth: int = 3, distractors: int = 6) -> Task:
     rng.shuffle(facts)
     prompt = (
         "Facts:\n" + "\n".join(f"- {f}" for f in facts)
-        + f"\n\nFollowing the reporting chain upward from {chain[0]}, who is {depth} levels above "
-        f"{chain[0]}? Reply with the name alone on the final line."
+        + f"\n\nFollowing the reporting chain upward from {chain[0]}, who is {depth} level{'s' if depth != 1 else ''} above "
+        f"{chain[0]}? End your reply with a final line of the form `ANSWER: <name>`."
     )
     gold = chain[depth]
 
+    cands = sorted({n for f in facts for n in f.rstrip(".").split(" reports to ")})
+
+    def extract(raw: str) -> tuple[str, bool]:
+        return extract_choice(raw, cands)
+
     def check(raw: str) -> bool:
-        return _tail_token(raw).strip(".,!").lower() == gold.lower()
+        return extract(raw)[0].lower() == gold.lower()
 
     return Task(f"hop-{depth}-{seed}", "multi_hop", seed, prompt, check,
-                answer=gold, difficulty={"depth": depth, "distractors": len(facts) - depth})
+                answer=gold, difficulty={"depth": depth, "distractors": len(facts) - depth},
+                extract=extract)
 
 
 FAMILIES: dict[str, Callable[..., Task]] = {
