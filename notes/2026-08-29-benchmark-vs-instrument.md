@@ -78,3 +78,29 @@ Testable, with the existing rig:
   discards the search that produced them.
 
 If that holds, it is a finding about agent memory generally, not about this repo's housekeeping.
+
+
+---
+
+## Postscript, 2026-08-30: the roster above was ranked without measuring anything
+
+Everything in the re-ranking is reasoning about what each model *would* contrast. Two days
+later the panel got measured on `multi_hop` depth 4, bare prompt, n=195:
+
+| | solo acc |
+|---|---|
+| qwen2.5 7B | 0.51 |
+| llama3.1 8B | 0.22 |
+| mistral:7b | 0.18 |
+
+The framing in this note is still right — model is a blocking factor, not a treatment. What it
+missed is that a blocking factor has to be *measured before it can block anything*. Three
+models were selected as a panel on the grounds that they were different families at matched
+size, and the resulting vote came in below its best member (p=0.007). See
+[`2026-08-30-who-is-in-the-room.md`](2026-08-30-who-is-in-the-room.md).
+
+The correction is small and load-bearing: **run every candidate solo on the target task before
+assigning it a role.** A model chosen for the contrast it should provide, without a number
+attached, is a guess wearing an argument. The re-ranking above reads as analysis and was
+analysis, but it could not have caught a 2.4× capability gap between two members it was
+treating as interchangeable, because it never looked.

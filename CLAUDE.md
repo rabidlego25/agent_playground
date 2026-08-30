@@ -28,11 +28,24 @@ about how agents perform best in workflows. Not a product. Started 2026-08-29.
 - Claude access is via a Pro subscription (usage-limited) — design for small, replayable sweeps rather than large fan-outs.
 - Model scope is **not** Claude-only: use whichever accessible model fits the role, and say why.
 
-## Currently available models (verified 2026-08-29)
+## Currently available models (verified 2026-08-30)
 
 - Claude, via Claude Code itself (Opus 5 / Sonnet 5 / Haiku 4.5) — subscription-metered.
-- Local via `ollama` (installed, server not running; `ollama serve` to start): `llama3.1:latest` (8B), `qwen2.5:latest` (7B). ~8.9 GB on disk.
-- No third-party API keys are set in the environment. Adding OpenAI/Gemini/Groq/OpenRouter keys would widen the comparison set.
+- Local via `ollama`: `qwen2.5:latest` (7B), `llama3.1:latest` (8B), `mistral:7b`. ~13.3 GB on disk.
+- No third-party API keys are set in the environment. Adding Groq/Google AI Studio/Cohere keys
+  costs $0 and no card, and would widen the roster to genuinely independent families.
+
+**Measured solo accuracy** on `multi_hop` depth 4, bare prompt, n=195 (2026-08-30):
+qwen2.5 **0.51**, llama3.1 **0.22**, mistral:7b **0.18**. Two consequences, both learned the
+expensive way in `experiments/003-mixed-panel/`:
+
+- **Do not treat the local models as a peer panel.** A vote among them lands *below* qwen2.5
+  alone (0.43, p=0.007) because two of three sit under the Condorcet competence threshold.
+- **Size is not capability.** llama3.1 8B is the largest local model and the second weakest.
+  Match panels on measured accuracy, never on parameter count.
+
+Every figure above is on the bare prompt, which `experiments/001-deliberation/` arm B showed is
+worth **0.21** to a single call. Solo rates are floors, not ceilings.
 
 ## Tooling
 
