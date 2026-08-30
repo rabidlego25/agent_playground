@@ -7,10 +7,11 @@
 \titleformat{\subsection}{\normalfont\bfseries}{\thesubsection}{0.6em}{}
 \setlength{\parskip}{0.15em}
 \pagestyle{plain}
+\raggedbottom
 
 \title{\vspace{-1.5em}\Large\bfseries Calibrating the Instrument Before the Experiment:\\
-Two Oracle Failures and a Misestimated Variance Floor\\
-in a Procedurally Generated Agent Benchmark}
+Two Oracle Failures, a Misestimated Variance Floor, and an\\
+Underpowered First Result in a Procedurally Generated Agent Benchmark}
 \author{\normalsize rabidlego25 \\ \normalsize\texttt{github.com/rabidlego25/agent\_playground}}
 \date{\normalsize 30 August 2026}
 
@@ -31,7 +32,11 @@ parameter turned out to be decorative --- the gold answer was the unique root of
 graph in 50/50 instances at every depth, and a heuristic that ignores depth entirely scored 100\%.
 Third, we find that variance across task \emph{samples} (0.163) exceeds run-to-run variance on a
 fixed sample (0.050) by a factor of three, which constrains how any later arm comparison may be
-run. We argue that all three are instances of one failure mode --- plausible, well-formed,
+run. After both repairs the difficulty parameter behaves monotonically, and a first configuration
+comparison becomes possible: three independent samples with majority vote score 0.57 against 0.48
+for a single sample, but on a paired test this is not significant ($p = 0.227$, 11 discordant
+pairs), and we estimate that $n \approx 195$ per arm is required to resolve an effect of that size.
+We argue that the three defects are instances of one failure mode --- plausible, well-formed,
 confidently wrong measurement --- and that the defence is storing complete traces rather than
 verdicts.
 \end{abstract}
@@ -69,7 +74,10 @@ two models at 4-bit quantisation on an M1 Pro.
 
 \textbf{Statistics.} Accuracies are reported with Wilson score intervals at 95\%, since the normal
 approximation misbehaves near 0 and 1 at $n \approx 50$. Format compliance is reported as a
-separate column rather than folded into accuracy, for reasons that Section 3.1 makes clear.
+separate column rather than folded into accuracy, for reasons that Section 3.1 makes clear. Where two arms
+are evaluated on the same task instances, the comparison is paired and we use an exact McNemar test
+on the discordant pairs rather than comparing marginal intervals, which for paired data are
+conservative to the point of being uninformative.
 
 \section{Results}
 
@@ -102,9 +110,39 @@ The repair extends the chain $a \geq 1$ levels above the gold answer, making the
 node. Re-testing over 200 instances per depth, the shortcut now scores 0/200 at every depth while
 the gold answer is verified to sit exactly \texttt{depth} hops above the query node in 200/200.
 
+\subsection{Behaviour after repair}
+
+Re-running the depth sweep on the repaired generator (Table~1) gives a monotone curve for
+\texttt{qwen2.5}: 0.82 at $d{=}1$ falling to 0.52 at $d{=}6$, with no reversals and format
+compliance of 1.00 in every cell. The useful operating region for a configuration experiment is
+$d = 2\text{--}4$, where accuracy sits between 0.60 and 0.68, far enough from ceiling and floor for
+an effect to be visible.
+
+\texttt{llama3.1} scores between 0.16 and 0.36 throughout, which invites the reading that it simply
+cannot do the task. The traces say something more specific. Of its 39 errors at $d{=}1$, \emph{37
+named a person on the correct reporting chain at the wrong height}; one named a subordinate and one
+named an unrelated person. The model locates the chain and then miscounts hops along it. This is
+the failure the repaired task was built to isolate, and it was undetectable beforehand, when any
+answer at the chain top scored correct regardless of the requested depth.
+
+\begin{table}[t]
+\centering\small
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+$d$ & 1 & 2 & 3 & 4 & 5 & 6\\
+\midrule
+\texttt{qwen2.5} & 0.82 & 0.68 & 0.62 & 0.60 & 0.52 & 0.52\\
+\texttt{llama3.1} & 0.22 & 0.32 & 0.32 & 0.36 & 0.24 & 0.16\\
+\bottomrule
+\end{tabular}
+\caption{Accuracy against chain depth after the shortcut repair, $n = 50$ per cell. Format
+compliance $\geq 0.96$ everywhere. Compare the pre-repair sweep, in which \texttt{llama3.1}
+accuracy \emph{rose} from 0.56 to 0.84 across the same range.}
+\end{table}
+
 \subsection{Calibration probes}
 
-Table~1 gives the probes that survive both repairs. Distractor count is a genuine difficulty knob.
+Table~2 gives the probes that survive both repairs. Distractor count is a genuine difficulty knob.
 Neither shuffling the order of facts nor replacing entity names with nonsense tokens moves accuracy
 beyond the noise floor, which is the evidence that procedural generation is buying the contamination
 resistance it was adopted for.
@@ -150,6 +188,30 @@ The consequence is a hard design constraint rather than a caveat: arms of a conf
 experiment must be evaluated on \emph{identical task instances}. Assigning each arm its own seed
 block would make a ten-point difference uninterpretable.
 
+\subsection{A first configuration measurement, and why it is not a result}
+
+With the instrument behaving, we ran the smallest configuration comparison the programme needs: a
+single sample (arm A) against three independent samples with majority vote and no communication
+(arm C), on the same 60 tasks at $d{=}4$ and temperature 0.7. Arm C is the control that any
+deliberation arm must beat, since it spends the same tokens without any agent talking to another.
+
+Arm A scored 0.48 [0.36, 0.61] and arm C scored 0.57 [0.44, 0.68], an apparent gain of 0.083 for
+$3.0\times$ the output tokens. The paired table is 26 both correct, 23 both wrong, 3 won by the
+single sample and 8 won by the vote. Eleven discordant pairs give an exact McNemar $p = 0.227$.
+The gain is not established. For scale, the three individual samples --- nominally the same arm ---
+scored 0.483, 0.550 and 0.500, a spread of 0.067 that is itself most of the claimed effect.
+
+From the observed discordance rate (0.183) and split (8:3), detecting an effect of this size at 80\%
+power requires roughly 35 discordant pairs, or $n \approx 195$ tasks per arm. This is the most
+useful output of the run: it converts an open-ended design question into a budget.
+
+One incidental finding may prove more valuable than the accuracy gain. Where all three samples
+agreed (9 of 60 tasks) the answer was correct 7 times; where all three differed (7 of 60) it was
+correct once. Ensembling therefore yields a calibration signal as well as an answer. Whether that
+signal survives when agents are allowed to talk is an open question with a clear failure mode:
+communication may raise agreement without raising accuracy, which would make consensus a worse
+predictor of correctness than it is here.
+
 \section{Discussion}
 
 The three defects share a structure. In each case the output was well formed, internally consistent,
@@ -168,6 +230,12 @@ a probe is useful precisely when it can fail visibly.
 We note a bias in our own reporting: a calibration probe that produces an impressive number is
 likelier to have been misdesigned than to have discovered something, and the probes above are
 reported for what they constrain rather than for what they show.
+
+The null in Section 3.6 is worth stating plainly rather than filing away. Had we reported the
+marginal accuracies alone --- 0.48 against 0.57, with a token count showing the cost --- the run
+would have read as modest support for ensembling. The paired test says the data do not distinguish
+the arms. Reporting the unpaired comparison would not have been wrong so much as underdetermined,
+and it is the form in which most multi-agent gains are published.
 
 \section{Availability}
 
