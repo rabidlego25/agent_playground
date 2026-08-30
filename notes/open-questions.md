@@ -64,3 +64,20 @@ Open:
   arms that scored plausibly.
 - Does the one-context/k-context asymmetry hold on a task with separable subgoals, where
   seeing another derivation carries information rather than just a prior?
+
+## Panel composition decided every outcome in 001 vs 003 (2026-08-30)
+
+Two experiments, identical tasks, identical voting rule, identical revision prompt; only the
+membership differed. Composition flipped the sign of the agreement–correctness relationship
+(unanimity 0.78 vs 0.31), decided whether voting helped or hurt (+0.07 vs −0.08 against the
+best member), and decided whether deliberation did anything (nothing vs +0.13 to the weakest
+member). See [`2026-08-30-who-is-in-the-room.md`](2026-08-30-who-is-in-the-room.md).
+
+Open:
+
+- Does a panel where the strong side is not outvoted — two members, or a vote weighted by solo
+  accuracy — capture the capability transfer that 003's 2-against-1 threw away?
+- Is willingness to adopt a peer answer a stable model property? Mistral adopted 56% and gained
+  0.13; llama adopted 35% and lost 0.03. One observation each.
+- Where is the Condorcet threshold once every member is prompted at its ceiling rather than
+  0.21 below it? All of 003's solo rates were measured on the bare prompt.

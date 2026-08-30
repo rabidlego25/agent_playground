@@ -1,6 +1,8 @@
 # 003 — Does a mixed-family panel restore what deliberation destroys?
 
-**Status:** running (2026-08-30). **Hypotheses stated before any arm was run.**
+**Status:** complete (2026-08-30). **Hypotheses stated before any arm was run.**
+**Result: H1 failed — the panel is too unequal to test H2 as designed. The finding that
+survives is per-member and was not what the experiment was built to measure.**
 
 ## Question
 
@@ -60,11 +62,113 @@ interesting only if `D-mixed` clears `C-mixed` on a paired McNemar in its own ri
 
 Cost normalisation is unchanged from 001: D pays for the round-one samples it reuses.
 
+## Results (2026-08-30, n=195)
+
+| arm | acc | 95% CI | tok_in | tok_out | total |
+|---|---|---|---|---|---|
+| solo qwen2.5 | 0.51 | [0.44, 0.58] | 31,838 | 21,976 | 53,814 |
+| solo llama3.1 | 0.22 | [0.17, 0.28] | 28,133 | 32,955 | 61,088 |
+| solo mistral:7b | 0.18 | [0.14, 0.24] | 30,615 | 1,573 | 32,188 |
+| C-mixed: k=3 vote, no comms | 0.43 | [0.36, 0.50] | 90,586 | 56,504 | 147,090 |
+| D-mixed: k=3 + revision round | 0.50 | [0.43, 0.57] | 343,468 | 166,600 | 510,068 |
+
+Paired (exact McNemar), all arms on identical task instances:
+
+| contrast | acc | first-only | second-only | p |
+|---|---|---|---|---|
+| qwen solo vs C-mixed | 0.51 → 0.43 | 24 | 8 | **0.0070** |
+| C-mixed vs D-mixed | 0.43 → 0.50 | 29 | 42 | 0.154 |
+| qwen solo vs D-mixed | 0.51 → 0.50 | 40 | 37 | 0.820 |
+
+### H1 — failed, and significantly
+
+The three-way vote lands **below its best member**, p=0.0070. This is Condorcet's jury
+theorem on its failure branch: majority voting improves on its members only when they clear
+a competence threshold, and two of three sit far below it. The guard fired exactly as the
+pre-registration said it would — **it fired on the wrong member.** The design predicted
+mistral as the risk; llama3.1 is the *largest* member of the panel and the second weakest.
+
+**The design error is stated plainly: matching the panel on size (7–8B) matches capacity only
+if capability tracks parameter count across families, and it does not.** Competence is the
+variable that governs whether a vote helps. Size was a proxy for it and a bad one.
+
+### H2 — direction reverses from 001, but does not reach significance
+
+Deliberation moved the mixed panel 0.43 → 0.50 (p=0.154). In 001's single-family panel
+deliberation did nothing (p=0.50); here it recovers most of what heterogeneity broke, which
+is the predicted direction. It is not established at this n.
+
+It is also not useful. D-mixed (0.50) is statistically indistinguishable from qwen2.5
+**alone** (0.51, p=0.820) at **9.5× the tokens** — 510,068 against 53,814. Deliberation
+repaired damage the panel design caused, and the repaired result equals doing nothing.
+
+Because C-mixed is a broken baseline, the pre-registered difference-of-differences against
+001 is not computed. Comparing a treatment to a control that is worse than its own best
+component measures the control's defect, not the treatment.
+
+### The result that survives: deliberation transferred capability, it did not average
+
+| member | pre → post | changed answer | of those, adopted a peer's answer |
+|---|---|---|---|
+| qwen2.5 (strong) | 0.51 → 0.50 | 57% | 59% |
+| llama3.1 (weak) | 0.22 → 0.19 | 79% | 35% |
+| **mistral:7b (weak)** | **0.18 → 0.31** | 82% | 56% |
+
+The strong member was **not dragged down**. It revised 57% of its answers and finished where
+it started. Mistral gained +0.13 — most of the way from its own level toward qwen's — for the
+cost of reading two peer answers.
+
+This is capability transfer, not regression to the mean, and it is the opposite of what a
+herding account predicts. The vote could not cash it because the panel was still two weak
+members against one strong one. **A composition where the strong side is not outvoted should
+capture it**, and that is the cheap follow-up: a two-member panel, or a weighted vote.
+
+Note the asymmetry between the two weak members: mistral adopted a peer answer in 56% of its
+revisions and gained; llama adopted one in 35% and lost 0.03. Being willing to be moved is
+what paid, not being weak.
+
+### Consensus means opposite things in different panels
+
+| distinct answers among 3 | 001 single-family | 003 mixed panel |
+|---|---|---|
+| 1 (unanimous) | **0.78** | **0.31** |
+| 2 | 0.57 | 0.36 |
+| 3 | 0.25 | 0.56 † |
+
+† **Artifact, not a finding.** With three distinct answers the majority is a three-way tie,
+and the tie-break follows panel order, so "all three disagree" is literally "trust qwen2.5"
+(41/73 = 0.56, against its 0.51 solo rate). The row measures the tie-break rule. It is left
+in the table rather than deleted because deleting it would hide that the rule is load-bearing
+wherever members are unequal.
+
+The first row is real and is the useful one. **Unanimity predicted 0.78 correct in a
+competent homogeneous panel and 0.31 in an unequal mixed one.** When a mixed panel agrees it
+is frequently because two weak members fell into the same wrong attractor. Consensus is a
+correctness signal in one composition and a shared-error-mode warning in the other, with no
+change to the voting rule — only to who is in the room.
+
+## Follow-ups
+
+- **Capability-matched panel.** The cheap version keeps everything local and lowers task depth
+  until all three members clear 0.5, since the threshold is what matters, not the depth. The
+  other version drops local models for free-tier API families.
+- **A composition where the strong side is not outvoted** — two members, or a vote weighted by
+  solo accuracy. The capability-transfer result above is currently unmonetisable and this is
+  what would monetise it.
+- **Willingness to be moved as a variable.** Mistral gained by adopting peer answers; llama
+  lost by resisting them. That is one observation each and worth a designed test.
+
 ## Known weaknesses
 
-- Three families is n=3 on the blocking factor. If mistral is much weaker than the other
-  two the vote degenerates toward the stronger pair and H2 is untestable — H1 is the guard
-  against reporting that case as a result.
+- ~~Three families is n=3 on the blocking factor. If mistral is much weaker than the other
+  two the vote degenerates and H2 is untestable — H1 is the guard against reporting that
+  case as a result.~~ **This happened.** H1 failed at p=0.0070 and H2 was not reported as a
+  clean result. The prediction was right and named the wrong member: llama3.1, the largest
+  model in the panel, was the second weakest.
+- Every arm here uses 001's bare prompt, which 001's own arm B later showed is worth 0.21 to
+  a single call. All three members were measured well below their prompt ceiling, so their
+  solo rates — and therefore the Condorcet threshold question — would look different on a
+  reasoning prompt. See `notes/2026-08-30-prompt-dominates-configuration.md`.
 - Same single task family as 001. A lookup task may be the worst case for deliberation
   regardless of who is deliberating; that confound is not addressed here and needs a task
   with separable subgoals.
