@@ -23,10 +23,13 @@ if __name__ == "__main__":
                                           "k": K, "depth": DEPTH, "temperature": TEMP})
         for j in range(K):
             c = b.complete(t.prompt, temperature=TEMP, max_tokens=400, seed=t.seed * 10 + j)
+            parsed, fmt_ok = t.parse(c.text)
             ep.step(state_before=t.prompt, action=c.text, tokens_in=c.tokens_in,
-                    tokens_out=c.tokens_out, latency_ms=c.latency_ms, meta={"sample": j})
+                    tokens_out=c.tokens_out, latency_ms=c.latency_ms,
+                    meta={"sample": j, "parsed": parsed, "format_ok": fmt_ok,
+                          "correct": t.scored(c.text), "error": c.error})
             answers.append(c.text)
-            fmts.append(t.parse(c.text)[1])
+            fmts.append(fmt_ok)
             if j == 0:                       # first sample IS the single-sample arm
                 single.n += 1
                 single.hits += int(t.scored(c.text))

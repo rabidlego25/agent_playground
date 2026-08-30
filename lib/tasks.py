@@ -237,19 +237,32 @@ print("PASS")
 
 
 # --------------------------------------------------------------------------- family 3
-def multi_hop(seed: int, depth: int = 3, distractors: int = 6) -> Task:
+def multi_hop(seed: int, depth: int = 3, distractors: int = 6, above: int = 2) -> Task:
     """A fact chain of a given depth, where each hop is only reachable from the previous.
 
     `depth` is the knob that makes error compounding measurable: accuracy against depth is
     the quantity of interest, not accuracy at any single depth.
+
+    `above` is a correctness requirement, not a knob to tune. The chain continues `above`
+    levels past the gold answer so the answer is an *interior* node. Without it (the
+    2026-08-29 bug) the gold answer was always the unique root of the graph, and "walk up
+    until you cannot" scored 100% at every depth without counting a single hop — so `depth`
+    changed prompt length and nothing else. Keep `above >= 1`.
     """
+    if above < 1:
+        raise ValueError("above must be >= 1, or the answer is the graph root and depth is decorative")
     rng = random.Random(seed)
     names = ["Vega", "Rigel", "Altair", "Mira", "Deneb", "Lyra", "Orin", "Cass",
-             "Talos", "Nyx", "Sable", "Quill", "Wren", "Zephyr"]
+             "Talos", "Nyx", "Sable", "Quill", "Wren", "Zephyr", "Corvus", "Draco",
+             "Elara", "Fenrir", "Halcy", "Iris", "Juno", "Kepler", "Lumen", "Mensa",
+             "Norne", "Ophir", "Pavo", "Rhea", "Solen", "Tycho"]
+    need = depth + 1 + above + distractors
+    if need > len(names):
+        raise ValueError(f"need {need} distinct names, have {len(names)}")
     rng.shuffle(names)
-    chain = names[: depth + 1]
-    facts = [f"{chain[i]} reports to {chain[i + 1]}." for i in range(depth)]
-    pool = names[depth + 1:]
+    chain = names[: depth + 1 + above]
+    facts = [f"{chain[i]} reports to {chain[i + 1]}." for i in range(depth + above)]
+    pool = names[depth + 1 + above:]
     placed = list(chain)                 # valid managers: nobody gains a second manager
     for a in pool[:distractors]:
         facts.append(f"{a} reports to {rng.choice(placed)}.")
@@ -271,7 +284,7 @@ def multi_hop(seed: int, depth: int = 3, distractors: int = 6) -> Task:
         return extract(raw)[0].lower() == gold.lower()
 
     return Task(f"hop-{depth}-{seed}", "multi_hop", seed, prompt, check,
-                answer=gold, difficulty={"depth": depth, "distractors": len(facts) - depth},
+                answer=gold, difficulty={"depth": depth, "distractors": distractors, "above": above},
                 extract=extract)
 
 
