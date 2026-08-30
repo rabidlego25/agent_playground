@@ -108,44 +108,91 @@ def phase_deliberate() -> None:
     print()
 
 
-BUDGET_TEMPLATE = """{original}
+# Arm B derivations are labelled with LETTERS and the count is never written as a digit.
+# The first version of this prompt said "work the chain {k} separate times" with k=7, and
+# qwen2.5 read the 7 as the hop count -- it walked seven levels up a task that asked for
+# four and answered the seventh name. B7 scored 0.27 against B3's 0.83 for that reason
+# alone. Any digit in an instruction wrapped around a counting task is a confound.
 
-Work the reporting chain {k} separate times, independently. Label them Attempt 1
-through Attempt {k}. Start each attempt from the fact list again and count the levels
-from scratch -- do not let an earlier attempt decide a later one. Then give the answer
-that most of your attempts agree on. End your reply with a final line of the form
-`ANSWER: <name>`."""
+COT_STEP = ("walk up the reporting chain one link at a time, writing each link on its own "
+            "line as `<name> -> <manager>`, and count the links as you go")
 
-B_KS = (3, 7)                    # matched to arm C's k, so the contrast is context sharing
+B_ONE = """{original}
+
+Before answering, """ + COT_STEP + """. Then answer.
+End your reply with a final line of the form `ANSWER: <name>`."""
+
+B_MANY = """{original}
+
+Do this three separate times, labelled Attempt A, Attempt B and Attempt C. In each
+attempt, """ + COT_STEP + """. Start each attempt from the fact list
+again rather than copying the one before it. Then give the answer that most of your
+attempts agree on. End your reply with a final line of the form `ANSWER: <name>`."""
+
+# Round three. B1/B3 above impose a notation; that turned out to matter more than
+# anything else in this experiment, so the corrected arms impose nothing. They add a
+# repetition instruction to the bare prompt and otherwise leave it alone.
+
+B_ONE_N = """{original}
+
+Before answering, work through the reporting chain step by step.
+End your reply with a final line of the form `ANSWER: <name>`."""
+
+B_MANY_N = """{original}
+
+Work through the reporting chain step by step three separate times, labelled Attempt A,
+Attempt B and Attempt C. Start each attempt from the fact list again rather than copying
+the one before it. Then give the answer that most of your attempts agree on.
+End your reply with a final line of the form `ANSWER: <name>`."""
+
+B_ARMS = {"B1": (B_ONE, 800), "B3": (B_MANY, 1600)}
+B_ARMS_N = {"B1n": (B_ONE_N, 800), "B3n": (B_MANY_N, 1600)}
+
+
+def phase_budget2() -> None:
+    """The corrected repetition arms. See phase_budget for what went wrong twice."""
+    _budget(B_ARMS_N, "001_budget2")
 
 
 def phase_budget() -> None:
-    """Arm B: k derivations inside ONE context, vs arm C's k derivations in k contexts.
+    """Arm B: derivations inside ONE context, against arm C's derivations in k contexts.
 
-    Not 'a bigger token cap' -- that arm is dead on arrival. The 400-token cap in the
-    samples phase bound 1 of 1365 completions (mean output 112 tokens), so raising it
-    changes nothing. The model has to be asked to do more work, not permitted to.
+    The originally planned arm -- same prompt, larger token cap -- is dead on arrival. The
+    400-token cap in the samples phase bound 1 of 1365 completions (mean output 112
+    tokens), so raising it buys nothing. The model has to be asked to do more work, not
+    permitted to.
 
-    Holding the number of derivations fixed and varying only whether they share a context
-    isolates the same variable as D vs C. If correlated error is what sinks D, B should
-    sink with it.
+    Two arms, because asking changes two things at once:
+
+      B1  one derivation, but an explicit one. Isolates chain-of-thought elicitation,
+          which the bare prompt used by arms A/C/D does not do at all.
+      B3  three derivations in one context. B3 - B1 isolates derivation count with the
+          reasoning instruction held fixed; that is the analogue of C3 - A, differing
+          only in whether the derivations can see each other.
+
+    B against C is NOT a clean context-sharing contrast, because C runs the bare prompt
+    and B does not. Reading it that way overstates the result; the honest comparison is
+    B3 - B1 against C3 - A.
     """
+    _budget(B_ARMS, "001_budget")
+
+
+def _budget(arms: dict, stem: str) -> None:
     b = require(MODEL)
-    w = TraceWriter("001_budget", results_dir=Path(__file__).parent / "runs")
+    w = TraceWriter(stem, results_dir=Path(__file__).parent / "runs")
     for i, t in enumerate(tasks()):
-        for k in B_KS:
-            prompt = BUDGET_TEMPLATE.format(original=t.prompt, k=k)
-            c = b.complete(prompt, temperature=TEMP, max_tokens=MAX_TOK * k,
-                           seed=t.seed * 10 + 200 + k)
+        for n, (tmpl, cap) in arms.items():
+            prompt = tmpl.format(original=t.prompt)
+            c = b.complete(prompt, temperature=TEMP, max_tokens=cap,
+                           seed=t.seed * 10 + 200 + len(n))
             parsed, fmt_ok = t.parse(c.text)
             ep = Episode(task_id=t.task_id, seed=t.seed,
-                         config={"experiment": "001", "phase": "budget", "arm": f"B{k}",
-                                 "model": MODEL, "k": k, "depth": DEPTH,
-                                 "temperature": TEMP, "max_tokens": MAX_TOK * k,
-                                 "difficulty": t.difficulty})
+                         config={"experiment": "001", "phase": "budget", "arm": n,
+                                 "model": MODEL, "depth": DEPTH, "temperature": TEMP,
+                                 "max_tokens": cap, "difficulty": t.difficulty})
             ep.step(state_before=prompt, action=c.text, tokens_in=c.tokens_in,
                     tokens_out=c.tokens_out, latency_ms=c.latency_ms,
-                    meta={"k": k, "parsed": parsed, "format_ok": fmt_ok,
+                    meta={"arm": n, "parsed": parsed, "format_ok": fmt_ok,
                           "correct": t.scored(c.text), "error": c.error})
             ep.finish(verdict=t.scored(c.text), outcome=parsed)
             w.write(ep)
@@ -193,15 +240,22 @@ def report() -> None:
     bpath = runs / "001_budget.jsonl"
     if bpath.exists():
         B = read(bpath)
-        for k in B_KS:
-            arm = [e for e in B if e["config"]["k"] == k]
+        b2 = runs / "001_budget2.jsonl"
+        if b2.exists():
+            B = B + read(b2)
+        labels = {"B1": "B: 1 deriv, format imposed",
+                  "B3": "B: 3 deriv, format imposed",
+                  "B1n": "B: 1 deriv, no format",
+                  "B3n": "B: 3 deriv, no format"}
+        for n in list(B_ARMS) + list(B_ARMS_N):
+            arm = [e for e in B if e["config"]["arm"] == n]
             if not arm:
                 continue
             hits = sum(bool(e["verdict"]) for e in arm)
             lo, hi = wilson(hits, len(arm))
             ti = sum(e["tokens_in_total"] for e in arm)
             to = sum(e["tokens_out_total"] for e in arm)
-            print(f"{f'B: k={k} in one context':<28} {hits / len(arm):>6.2f}  "
+            print(f"{labels[n]:<28} {hits / len(arm):>6.2f}  "
                   f"[{lo:.2f},{hi:.2f}]  {ti:>8} {to:>8} {ti + to:>8}")
     if dpath.exists():
         print(f"\n  agents that changed their answer after seeing peers: {changed}/{total}"
@@ -211,4 +265,4 @@ def report() -> None:
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "report"
     {"samples": phase_samples, "deliberate": phase_deliberate,
-     "budget": phase_budget, "report": report}[cmd]()
+     "budget": phase_budget, "budget2": phase_budget2, "report": report}[cmd]()
