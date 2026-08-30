@@ -188,5 +188,12 @@ if __name__ == "__main__":
         report()
     else:
         arg = sys.argv[2]
-        model = next(m for m in PANEL if slug(m) == arg or m == arg)
+        # accept the full spec, the bare model name, or the filename slug -- the three
+        # spellings of "mistral" differ and guessing wrong exits with a bare StopIteration
+        match = [m for m in PANEL
+                 if arg in (m, slug(m), m.split(":", 1)[1])]
+        if len(match) != 1:
+            sys.exit(f"{arg!r} matches {len(match)} panel members; use one of: "
+                     + ", ".join(slug(m) for m in PANEL))
+        model = match[0]
         {"samples": phase_samples, "deliberate": phase_deliberate}[cmd](model)

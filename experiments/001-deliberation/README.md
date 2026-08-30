@@ -2,6 +2,7 @@
 
 **Status:** complete (2026-08-30). **Hypotheses stated before any arm was run.**
 **Result: H1 confirmed, H2 rejected as predicted, H3 supported.**
+**Arm B, added after the fact, outranks every arm above and reframes all of them.**
 
 ## Question
 
@@ -121,14 +122,100 @@ Post-deliberation consensus is a strictly worse signal than pre-deliberation con
 reliability, applied to 60% more cases. An accuracy-only score would report "no change" and
 miss that the confidence signal degraded.
 
+## Arm B — one agent, added after the pre-registration (2026-08-30, n=195)
+
+Arm B was not in the original design. It was added because the design had no answer to the
+obvious practitioner question: if k agents cost k times as much, what does one agent do with
+the same money? The planned version — same prompt, larger token cap — is dead on arrival.
+The 400-token cap bound **1 of 1365** completions and mean output was 112 tokens, so raising
+it buys nothing. The model has to be *asked* to do more work, not permitted to.
+
+Asking changes two things at once, so B splits them: whether the model is told to reason,
+and whether an output notation is imposed on it.
+
+| arm | acc | 95% CI | total tokens | vs. A, paired |
+|---|---|---|---|---|
+| **B1n: reason step by step, no notation** | **0.72** | [0.66, 0.78] | **51,898** | +0.21, p<0.0001 |
+| B3n: same, three attempts, one context | 0.50 | [0.43, 0.57] | 86,220 | −0.01, p=0.81 |
+| B3: three attempts, notation imposed | 0.31 | [0.25, 0.38] | 75,596 | −0.20, p<0.0001 |
+| B1: one attempt, notation imposed | 0.27 | [0.21, 0.34] | 50,415 | −0.24, p<0.0001 |
+
+**One sentence of prompt beats every multi-agent arm at a tenth the cost.** B1n adds
+"Before answering, work through the reporting chain step by step" and nothing else. It
+reaches 0.72 for 51,898 tokens — cheaper than a single bare sample, above the seven-way
+vote (0.63 for 376,156) and above deliberation (0.61 for 500,045).
+
+### The finding that pays for the arm
+
+| | one context | k contexts |
+|---|---|---|
+| 1 derivation | B1n **0.73** | A 0.51 |
+| 3 derivations | B3n **0.51** | C3 **0.58** |
+
+Three derivations in one context are **significantly worse** than one (p<0.0001). Three in
+separate contexts are **significantly better** than one (p=0.0125). Same model, same task,
+same derivation count; the only difference is whether the derivations can see each other.
+Per-attempt output length is identical (76 vs ~75 tokens), so this is not a budget effect —
+the model copies its first attempt into the next two, and a vote over three copies of one
+derivation returns the bare-prompt baseline exactly (0.51 against 0.52).
+
+This is the third independent test of the correlation account in the H2 section, and the
+strongest, because it is a **loss** rather than a null. Deliberation gave a null. In-context
+repetition gives a real decrement. Both spend the error independence that voting depends on.
+
+### Two prompt bugs, kept in the record
+
+Both were invisible in the aggregate score and obvious within thirty seconds of reading raw
+completions. Both are mine.
+
+**Numeric interference.** The first version said "work the chain *seven* separate times" on a
+task asking "who is *4* levels above X". qwen2.5 read the seven as the hop count, walked
+seven links, and answered the seventh name. B7 scored 0.27 against B3's 0.83 for that reason
+alone. Digits in an instruction wrapped around a counting task are a confound. That trace is
+discarded, not committed; the corrected arms label attempts A/B/C and contain no digits.
+
+**Format suppression.** The replacement asked the model to "write each link as
+`<name> -> <manager>` and count the links as you go". The notation has no slot for a count,
+so the model obeyed the notation and dropped the count, walking to the top of the chain
+instead of stopping at the requested depth:
+
+```
+bare prompt (arm A), correct          notation imposed (arm B1), one link too far
+  1. Rhea reports to Talos.             Rhea -> Talos
+  2. Talos reports to Altair.           Talos -> Altair
+  3. Altair reports to Elara.           Altair -> Elara
+  4. Elara reports to Draco.            Elara -> Draco
+  ANSWER: Draco   <- gold               Draco -> Iris
+                                        ANSWER: Iris
+```
+
+The bare prompt spontaneously **numbers** its steps, and the numbering is what enforces the
+stop. Imposing a notation removed it, and cost 0.24 accuracy while cutting output from 112
+tokens to 36. B1/B3 are kept and reported at full n because they are a clean measurement of
+exactly that: imposed format against unimposed, identical tasks, paired.
+
+### What this does to the rest of 001
+
+It does not refute the arms above. They all shared the bare prompt, so the comparisons
+between them stand: ensembling really does beat a single sample, and deliberation really does
+not beat non-communicating agents at matched cost.
+
+It does relocate them. The whole ensembling curve lives between 0.51 and 0.63, and a one-line
+prompt change reaches 0.72 for free — so every configuration effect measured here fits inside
+a band a single sentence moves you across. **The multi-agent question was being asked in a
+regime where the model was not reasoning at all.** Before any of this is reported as a finding
+about multi-agent systems, the C curve needs re-running on the B1n prompt: at a 0.72 base rate
+the headroom is 0.28 rather than 0.49, and ensembling gains generally shrink as the base rate
+rises. That is one sweep, and it decides whether 001 is a result about deliberation or a
+result about a weak prompt.
+
 ## Follow-ups this opens
 
 - **Mixed-family panel** (`003-mixed-panel/`) — the falsification test of the correlation
   explanation above. Same tasks, same seeds, panel of qwen2.5 / llama3.1 / mistral at matched
   size (7–8B) so family varies and capacity does not.
-- **Arm B** — one agent given k× the token budget. The design above has no such arm, and it is
-  the control a practitioner actually cares about: if one agent thinking longer beats a k-way
-  vote, the multi-agent framing is answering the wrong question.
+- **Re-run the C curve on the B1n prompt.** The single highest-value follow-up: it decides
+  whether the ensembling result survives outside the weak-prompt regime. ~1,365 calls.
 - **Planted wrong peer** — replace one peer with a confident plausible error. Separates
   information-following from conformity in the 50% mind-change rate. Reuses phase-1 traces.
 - **A task family that decomposes.** `multi_hop` has no division of labour by construction. If
@@ -138,6 +225,9 @@ miss that the confidence signal degraded.
 
 - One task family. A lookup task may be the least favourable case for deliberation; a task with
   separable subgoals could plausibly go the other way, and that is a different experiment.
+- **Every arm except B was measured on a prompt that does not ask the model to reason.** Arm B
+  shows that prompt is worth 0.21 to a single call. The configuration comparisons are internally
+  valid and externally provisional until the C curve is re-run at the higher base rate.
 - One model, and a small one. Whether the null is about deliberation or about *homogeneous*
   deliberation is what `003-mixed-panel/` was built to decide.
   roster is meant to probe.

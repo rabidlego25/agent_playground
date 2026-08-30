@@ -48,3 +48,19 @@ Running list. Add freely; mark ones that become experiments with their experimen
   transaction-cost account of firm boundaries predict where agent boundaries should fall?
 - PIC analogy: multi-agent systems as particles in a shared field, where the field is the shared context.
   Probably a stretch, but the "long-range vs. local interaction" split maps onto shared-context vs. handoff designs.
+
+## Where on the prompt axis is a configuration sweep sitting? (2026-08-30)
+
+001 found the prompt axis (0.27–0.72) is three times wider than the configuration axis
+(0.51–0.63) on the same model and tasks, and its best point is also its cheapest. See
+[`2026-08-30-prompt-dominates-configuration.md`](2026-08-30-prompt-dominates-configuration.md).
+
+Open:
+
+- Does the ensembling gain survive at the top of the prompt axis, or was it compensating for
+  a bad prompt? Re-running the C curve on the B1n prompt answers this and is queued.
+- Is "find the prompt ceiling first" tractable in general, or does it just move the search
+  cost around? Finding the ceiling took three tries here, two of which produced confounded
+  arms that scored plausibly.
+- Does the one-context/k-context asymmetry hold on a task with separable subgoals, where
+  seeing another derivation carries information rather than just a prior?

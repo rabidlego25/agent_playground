@@ -12,8 +12,9 @@ stated hypothesis and a trace someone else could re-analyze.
 
 | ID | Question | Status | Verdict |
 |----|----------|--------|---------|
-| 001 | Does pre-task communication between agents beat a single agent, at matched tokens? | running | [README](experiments/001-deliberation/README.md) |
+| 001 | Does deliberation between agents beat a single agent, at matched tokens? | complete | **No.** 1.85× the cost of non-communicating agents for identical accuracy. One line of prompt beats every arm at a tenth the cost. [README](experiments/001-deliberation/README.md) |
 | 002 | Does rhetorical packaging change what a reader agent does, at equal information? | designed | [README](experiments/002-rhetoric-vs-information/README.md) |
+| 003 | Does a mixed-family panel restore what deliberation destroys? | running | Panel too unequal — the 3-way vote lands below its best member. [README](experiments/003-mixed-panel/README.md) |
 
 Keep this table current. A repo of fifty experiments with no index is write-only — you re-run what
 you already answered.
