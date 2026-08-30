@@ -123,7 +123,7 @@ miss that the confidence signal degraded.
 
 ## Follow-ups this opens
 
-- **Mixed-family panel** (`002-mixed-panel/`) — the falsification test of the correlation
+- **Mixed-family panel** (`003-mixed-panel/`) — the falsification test of the correlation
   explanation above. Same tasks, same seeds, panel of qwen2.5 / llama3.1 / mistral at matched
   size (7–8B) so family varies and capacity does not.
 - **Arm B** — one agent given k× the token budget. The design above has no such arm, and it is
@@ -138,7 +138,8 @@ miss that the confidence signal degraded.
 
 - One task family. A lookup task may be the least favourable case for deliberation; a task with
   separable subgoals could plausibly go the other way, and that is a different experiment.
-- One model, and a small one. Whether the effect depends on capability is the interaction 002's
+- One model, and a small one. Whether the null is about deliberation or about *homogeneous*
+  deliberation is what `003-mixed-panel/` was built to decide.
   roster is meant to probe.
 - The revision prompt tells agents the peers "may all be wrong", which pushes against conformity.
   A neutral phrasing would likely show more herding; the honest version reports both.

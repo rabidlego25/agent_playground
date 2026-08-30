@@ -108,6 +108,51 @@ def phase_deliberate() -> None:
     print()
 
 
+BUDGET_TEMPLATE = """{original}
+
+Work the reporting chain {k} separate times, independently. Label them Attempt 1
+through Attempt {k}. Start each attempt from the fact list again and count the levels
+from scratch -- do not let an earlier attempt decide a later one. Then give the answer
+that most of your attempts agree on. End your reply with a final line of the form
+`ANSWER: <name>`."""
+
+B_KS = (3, 7)                    # matched to arm C's k, so the contrast is context sharing
+
+
+def phase_budget() -> None:
+    """Arm B: k derivations inside ONE context, vs arm C's k derivations in k contexts.
+
+    Not 'a bigger token cap' -- that arm is dead on arrival. The 400-token cap in the
+    samples phase bound 1 of 1365 completions (mean output 112 tokens), so raising it
+    changes nothing. The model has to be asked to do more work, not permitted to.
+
+    Holding the number of derivations fixed and varying only whether they share a context
+    isolates the same variable as D vs C. If correlated error is what sinks D, B should
+    sink with it.
+    """
+    b = require(MODEL)
+    w = TraceWriter("001_budget", results_dir=Path(__file__).parent / "runs")
+    for i, t in enumerate(tasks()):
+        for k in B_KS:
+            prompt = BUDGET_TEMPLATE.format(original=t.prompt, k=k)
+            c = b.complete(prompt, temperature=TEMP, max_tokens=MAX_TOK * k,
+                           seed=t.seed * 10 + 200 + k)
+            parsed, fmt_ok = t.parse(c.text)
+            ep = Episode(task_id=t.task_id, seed=t.seed,
+                         config={"experiment": "001", "phase": "budget", "arm": f"B{k}",
+                                 "model": MODEL, "k": k, "depth": DEPTH,
+                                 "temperature": TEMP, "max_tokens": MAX_TOK * k,
+                                 "difficulty": t.difficulty})
+            ep.step(state_before=prompt, action=c.text, tokens_in=c.tokens_in,
+                    tokens_out=c.tokens_out, latency_ms=c.latency_ms,
+                    meta={"k": k, "parsed": parsed, "format_ok": fmt_ok,
+                          "correct": t.scored(c.text), "error": c.error})
+            ep.finish(verdict=t.scored(c.text), outcome=parsed)
+            w.write(ep)
+        print(f"\r  budget {i + 1}/{N}", end="", flush=True)
+    print()
+
+
 def report() -> None:
     runs = Path(__file__).parent / "runs"
     S = read(runs / "001_samples.jsonl")
@@ -145,6 +190,19 @@ def report() -> None:
         print()
     for lab, acc, lo, hi, ti, to, tot in rows:
         print(f"{lab:<28} {acc:>6.2f}  [{lo:.2f},{hi:.2f}]  {ti:>8} {to:>8} {tot:>8}")
+    bpath = runs / "001_budget.jsonl"
+    if bpath.exists():
+        B = read(bpath)
+        for k in B_KS:
+            arm = [e for e in B if e["config"]["k"] == k]
+            if not arm:
+                continue
+            hits = sum(bool(e["verdict"]) for e in arm)
+            lo, hi = wilson(hits, len(arm))
+            ti = sum(e["tokens_in_total"] for e in arm)
+            to = sum(e["tokens_out_total"] for e in arm)
+            print(f"{f'B: k={k} in one context':<28} {hits / len(arm):>6.2f}  "
+                  f"[{lo:.2f},{hi:.2f}]  {ti:>8} {to:>8} {ti + to:>8}")
     if dpath.exists():
         print(f"\n  agents that changed their answer after seeing peers: {changed}/{total}"
               f" ({changed / total:.0%})")
@@ -152,4 +210,5 @@ def report() -> None:
 
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "report"
-    {"samples": phase_samples, "deliberate": phase_deliberate, "report": report}[cmd]()
+    {"samples": phase_samples, "deliberate": phase_deliberate,
+     "budget": phase_budget, "report": report}[cmd]()
