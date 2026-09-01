@@ -1,7 +1,8 @@
 # 006 — Where does the ensembling curve saturate on the reasoning prompt, and does `c` predict it?
 
-**Status:** pre-registered 2026-09-01, not yet run. **Prediction and estimator fixed in this
-file before any draw was taken.**
+**Status:** pre-registered 2026-09-01 (commit `b57eac6`); sampling sweep in progress, 51/195
+tasks drawn, stopped by request and resumable. **Prediction and estimator fixed in this file
+and committed before any draw was taken.** No result yet.
 
 ## Question
 

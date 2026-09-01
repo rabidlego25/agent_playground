@@ -63,12 +63,18 @@ Open:
   surprise: error independence *rose* (conditional-on-wrong agreement 0.339 → 0.239), so base
   rate and ensembling return moved together. Deliberation on the same prompt went from
   uneconomic to significantly harmful (0.71 vs C′7's 0.86, p<0.0001).
-- **[004 opens]** Where does the C′ curve saturate? k=7 was the pre-registered maximum and it
-  had not flattened (0.74 → 0.83 → 0.86); the bare-prompt curve saturated at k=3. One cheap
-  sweep at k∈{9,11,15}.
+- ~~**[004 opens]** Where does the C′ curve saturate?~~ **[006] Running, 2026-09-01.** k=7 was
+  the pre-registered maximum and had not flattened (0.74 → 0.83 → 0.86); the bare-prompt curve
+  saturated at k=3. 006 extends the sweep to k=15 and — the reason it is worth doing — states a
+  number first: k=15 = 0.89 [0.86, 0.93], against a plug-in estimator that says 0.862, i.e. that
+  the curve is already done. It is the first time `c` has been asked to predict rather than
+  explain.
 - **[004 opens]** Is `c` — conditional-on-wrong agreement — measurable from k=3 draws? If so it
   forecasts the ensembling return and makes "should I ensemble this workload" a cheap
-  measurement instead of a full curve.
+  measurement instead of a full curve. **[006] Partial answer, and it is discouraging:**
+  bootstrap-extrapolating the *curve* from a 3-draw pool under-predicts k=5 by 0.121 and k=7 by
+  0.147, because a small pool cannot reproduce how concentrated the answer distribution is. The
+  cheap-forecast version of this question needs an estimator that is not plug-in resampling.
 - **[004 opens]** Does the sign flip hold for other prompt interventions, or is step-by-step
   reasoning special? Few-shot examples plausibly go the other way, by supplying a shared
   template that makes errors *more* correlated.
@@ -91,11 +97,25 @@ Open:
 - Does a panel where the strong side is not outvoted — two members, or a vote weighted by solo
   accuracy — capture the capability transfer that 003's 2-against-1 threw away?
 - Is willingness to adopt a peer answer a stable model property? Mistral adopted 56% and gained
-  0.13; llama adopted 35% and lost 0.03. One observation each.
-- Where is the Condorcet threshold once every member is prompted at its ceiling rather than
-  0.21 below it? All of 003's solo rates were measured on the bare prompt. **[004] qwen2.5
-  moved 0.51 → 0.67 on the reasoning prompt; if llama3.1 and mistral move comparably the mixed
-  panel may clear the threshold 003 failed. This is now the cheapest live follow-up.**
+  0.13; llama adopted 35% and lost 0.03. One observation each. **[005] A second observation, but
+  not directly comparable:** 005 logs `changed_mind` (answer differs from own round one), not
+  "adopted a peer", and it is much higher — mistral 73% (+0.082), llama 79% (−0.015), qwen 49%
+  (−0.123). The ordering of *gain* held; the adoption rates are a different metric and should not
+  be read against 003's without recomputing one from the other's traces.
+- **[005 opens, and it is the sharpest one left]** Does deliberation harm scale with the
+  *competence gap* between a member and its peers? qwen2.5 lost nothing deliberating against
+  its own family at the same prompt (004: net exactly 0) and −0.123 against peers 0.43 below it
+  (005). Two points, and the second also changes family, so "harm tracks the gap" and "harm
+  tracks family mismatch" are not yet separated. Cheap to settle: `004_samples.jsonl` holds
+  seven independent qwen draws per task, so peer blocks at intermediate gaps can be assembled
+  from traces already on disk and only qwen's revision calls are new (~95 min).
+- ~~Where is the Condorcet threshold once every member is prompted at its ceiling rather than
+  0.21 below it?~~ **[005] Answered 2026-09-01: the panel does not clear it, and prompting made
+  it worse.** The members did not move comparably — qwen2.5 +0.154, mistral +0.108, llama3.1
+  −0.026 — so the panel went from 0.51/0.22/0.18 to 0.67/0.19/0.29 and the vote lost to its best
+  member by 0.09 (p=0.0001) against 003's 0.08. Cross-family `c` fell to 0.211, the most
+  independent errors measured in this repo, and it bought nothing: **competence is the binding
+  constraint, not independence.**
 - **[004] partly retired:** "a composition where the strong side is not outvoted would capture
   the capability transfer" assumes there is transfer to capture. On the reasoning prompt there
   is none — deliberation produced 97 wrong→right against 97 right→wrong, net exactly zero,
