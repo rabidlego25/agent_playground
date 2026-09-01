@@ -1,9 +1,10 @@
 # 005 — Does the mixed panel clear the Condorcet threshold once every member is prompted at its ceiling?
 
-**Status:** sample phases complete (2026-09-01); deliberation phases interrupted at 30/195 and
-not yet reported. **Hypotheses pre-registered and committed (dc6a516) before any arm was run.**
+**Status:** complete (2026-09-01), all five phases at n=195. **Hypotheses pre-registered and
+committed (dc6a516) before any arm was run.**
 **Result: H1 failed again and harder; H2 rejected — the prompt gain does not transfer to
-llama3.1 at all; H3 confirmed — prompting and heterogeneity buy independence that stacks.**
+llama3.1 at all; H3 confirmed — prompting and heterogeneity buy independence that stacks;
+H4 confirmed in direction but the interesting half is the cost to the strong member.**
 
 ## Question
 
@@ -111,11 +112,12 @@ reuses.
   here; only the cross-family figure is.
 - Same single task family as 001, 003 and 004.
 
-## Results — sample phases (2026-09-01, n=195)
+## Results (2026-09-01, n=195)
 
-Both round-one phases completed at full n. The deliberation phases were interrupted 30/195
-into the first of three, so **H4 is not reported here**; H1, H2 and H3 need only round-one
-draws and are complete.
+All five phases completed at full n. The deliberation phases were interrupted twice — once at
+30/195 and once at 164/195 — and resumed; `run.py` skips task_ids already on disk, so no task
+was drawn twice. The discarded 30-task prefix from the first interruption is kept under
+`runs/interrupted/` rather than resumed, because it predates that guard.
 
 | arm | acc | 95% CI | tok_in | tok_out | total |
 |---|---|---|---|---|---|
@@ -126,6 +128,7 @@ draws and are complete.
 | solo B1n: llama3.1 | 0.19 | [0.15, 0.26] | 33,983 | 60,746 | 94,729 |
 | solo B1n: mistral:7b | 0.29 | [0.23, 0.36] | 37,407 | 21,906 | 59,313 |
 | C-mixed′: k=3 vote, no comms | 0.58 | [0.51, 0.65] | 109,078 | 100,673 | 209,751 |
+| D-mixed′: k=3 + revision round | 0.49 | [0.42, 0.56] | 450,042 | 250,652 | 700,694 |
 
 ### H2 — rejected as stated. The prompt gain does not transfer uniformly
 
@@ -206,3 +209,57 @@ member by 0.09, p=0.0001. **Competence is the binding constraint, and independen
 once members clear the threshold.** 003 read its failure as a composition problem and was right;
 004 read its success as an independence story and was right; 005 shows independence without
 competence buys nothing at all.
+
+### H4 — confirmed in direction, but the load-bearing number is what deliberation cost the strong member
+
+H4 predicted 003's capability transfer would shrink or vanish once the weak members had their
+own derivation. It shrank and did not vanish.
+
+| member | pre | post | delta | changed mind | w→r | r→w | net | [003, bare] |
+|---|---|---|---|---|---|---|---|---|
+| qwen2.5 | 0.67 | 0.54 | **−0.123** | 49% | 23 | 47 | **−24** | −0.01 |
+| llama3.1 | 0.19 | 0.18 | −0.015 | 79% | 27 | 30 | −3 | −0.03 (35% adopted) |
+| mistral:7b | 0.29 | 0.37 | **+0.082** | 73% | 47 | 31 | **+16** | +0.13 (56% adopted) |
+
+Mistral still gains from reading peers, but less than on the bare prompt (+0.13 → +0.082) —
+the predicted direction, by the predicted mechanism: it now has some derivation of its own, so
+a peer answer displaces slightly more signal than it did when mistral was emitting 8.1 tokens
+and no reasoning at all. Llama is unchanged and near zero in both runs.
+
+The result the pre-registration did not anticipate is qwen2.5's **−0.123** (47 right→wrong
+against 23 wrong→right, p well past any threshold on those counts). Its comparison points:
+
+| qwen2.5 in deliberation | net |
+|---|---|
+| 003, bare prompt, mixed panel | −0.01 |
+| 004, B1n prompt, within-family panel | exactly 0 (97 w→r vs 97 r→w) |
+| **005, B1n prompt, mixed panel** | **−24 (−0.123)** |
+
+Neither intervention alone hurt the strong member. Together they cost it a fifth of its
+accuracy. The mechanism is visible in the change rates: qwen revised on 49% of tasks, and it
+is the only member whose peers are *both* substantially weaker than it is. Prompting widened
+that gap — 003's panel was 0.51/0.22/0.18, 005's is 0.67/0.19/0.29 — so the better qwen got,
+the more of what it saw in the peer block was wrong. **Deliberation transfers capability in
+both directions, and the size of the transfer is set by the gap, not by who is right.**
+
+That is what sinks the D arm: 0.49, nine points below the no-communication vote (0.58) and
+eighteen below qwen alone (0.67), for **3.3× the tokens** of C-mixed′ and 12.6× solo qwen.
+It reproduces 004's finding on a mixed panel — at the prompt ceiling, deliberation is harmful,
+not merely uneconomic — and shows the harm grows when the panel is unequal.
+
+#### One reading to avoid
+
+The agreement breakdown looks like it says disagreement stopped being informative:
+
+| answers distinct | pre: tasks | pre: majority correct | post: tasks | post: majority correct |
+|---|---|---|---|---|
+| 1 | 19 | 0.58 | 16 | 0.69 |
+| 2 | 111 | 0.53 | 103 | 0.53 |
+| 3 | 65 | **0.66** | 76 | **0.39** |
+
+It does not. `vote()` breaks ties toward the earliest panel member, so the 3-distinct row is
+*by construction* qwen2.5 deciding alone — 0.66 pre is qwen's solo 0.67, and 0.39 post is
+qwen's post-deliberation accuracy on those tasks. The row restates the table above rather than
+adding to it. What the breakdown does show independently is that full disagreement got **more**
+common after a round of communication (65 → 76 of 195): the revision round pushed the panel
+apart, not together.
