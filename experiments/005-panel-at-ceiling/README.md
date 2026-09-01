@@ -1,6 +1,9 @@
 # 005 — Does the mixed panel clear the Condorcet threshold once every member is prompted at its ceiling?
 
-**Status:** pre-registered 2026-09-01, not yet run.
+**Status:** sample phases complete (2026-09-01); deliberation phases interrupted at 30/195 and
+not yet reported. **Hypotheses pre-registered and committed (dc6a516) before any arm was run.**
+**Result: H1 failed again and harder; H2 rejected — the prompt gain does not transfer to
+llama3.1 at all; H3 confirmed — prompting and heterogeneity buy independence that stacks.**
 
 ## Question
 
@@ -107,3 +110,99 @@ reuses.
 - k=1 per family, as in 003. Within-family `c` for llama and mistral is therefore not measured
   here; only the cross-family figure is.
 - Same single task family as 001, 003 and 004.
+
+## Results — sample phases (2026-09-01, n=195)
+
+Both round-one phases completed at full n. The deliberation phases were interrupted 30/195
+into the first of three, so **H4 is not reported here**; H1, H2 and H3 need only round-one
+draws and are complete.
+
+| arm | acc | 95% CI | tok_in | tok_out | total |
+|---|---|---|---|---|---|
+| solo bare: qwen2.5 | 0.51 | [0.44, 0.58] | 31,838 | 21,976 | 53,814 |
+| solo bare: llama3.1 | 0.22 | [0.17, 0.28] | 28,133 | 32,955 | 61,088 |
+| solo bare: mistral:7b | 0.18 | [0.14, 0.24] | 30,615 | 1,573 | 32,188 |
+| solo B1n: qwen2.5 | **0.67** | [0.60, 0.73] | 37,688 | 18,021 | 55,709 |
+| solo B1n: llama3.1 | 0.19 | [0.15, 0.26] | 33,983 | 60,746 | 94,729 |
+| solo B1n: mistral:7b | 0.29 | [0.23, 0.36] | 37,407 | 21,906 | 59,313 |
+| C-mixed′: k=3 vote, no comms | 0.58 | [0.51, 0.65] | 109,078 | 100,673 | 209,751 |
+
+### H2 — rejected as stated. The prompt gain does not transfer uniformly
+
+| member | bare | B1n | delta | p (paired) |
+|---|---|---|---|---|
+| qwen2.5 | 0.51 | 0.67 | **+0.154** | 0.0016 |
+| llama3.1 | 0.22 | 0.19 | **−0.026** | 0.583 |
+| mistral:7b | 0.18 | 0.29 | **+0.108** | 0.0111 |
+
+H2 predicted **both** weak members would gain ≥ +0.10. Mistral did (+0.108, and it was the
+predicted direction — it emitted 8.1 output tokens per sample on the bare prompt, i.e. was not
+reasoning at all, and moved to 112). **llama3.1 gained nothing.**
+
+This is the answer to the question 004 could not ask: **"fix the prompt first" is not universal
+advice.** The same sentence is worth +0.154 to one model, +0.108 to another and 0.000 to a
+third, on identical tasks. A prompt intervention is a property of the *pair* (prompt, model),
+not of the prompt.
+
+### The cap guard fired, and the diagnostic clears it
+
+The pre-registered rule was: above 5% cap-binding, report the solo rate as a lower bound and
+re-run at 1600.
+
+| member | cap-bound at 800 |
+|---|---|
+| qwen2.5 | 0/195 (0.0%) |
+| **llama3.1** | **23/195 (11.8%)** |
+| mistral:7b | 0/195 (0.0%) |
+
+llama tripled its output under B1n (169 → 312 mean, median 216) and ran past the cap on 23
+tasks. But truncation does not explain its null:
+
+| llama3.1 subset | n | B1n acc | same tasks, bare |
+|---|---|---|---|
+| not cap-bound | 172 | **0.198** | **0.198** |
+| cap-bound | 23 | 0.174 | — |
+
+**Identical to three decimals on the untruncated subset.** llama is not being robbed of accuracy
+by the token cap; it gets nothing from the instruction. The 1600 re-run the rule obliges is
+still owed and is now a confirmation rather than a decider — recorded here so the rule is not
+quietly dropped because the post-hoc analysis went the convenient way.
+
+A second llama problem is visible and is *not* about the cap: 41/195 completions failed to
+produce a parseable `ANSWER:` line, and only 23 of those were truncated. The remaining 18 are
+plain format non-compliance. llama3.1's rate on this task family is partly an
+instruction-following measurement, not only a reasoning one.
+
+### H1 — failed again, and harder than in 003
+
+| | best member | mixed vote | p |
+|---|---|---|---|
+| 003 (bare) | 0.51 | 0.43 | 0.0070 |
+| **005 (B1n)** | **0.67** | **0.58** | **0.0001** |
+
+The gate fails a second time. The panel improved a lot in absolute terms (0.43 → 0.58) and the
+gap to its best member *widened*, because the prompt moved the strongest member furthest. Fixing
+the prompt made the composition problem worse, not better: qwen2.5 pulled to 0.67 while llama
+stayed at 0.19, so the vote is now 2-against-1 by a larger margin. **Prompting a panel at its
+ceiling does not fix an unequal panel; it can make it more unequal.**
+
+### H3 — confirmed, and the two sources of independence compose
+
+| condition | c |
+|---|---|
+| bare, within-family (001) | 0.339 |
+| bare, cross-family (003) | 0.249 |
+| B1n, within-family (004) | 0.239 |
+| **B1n, cross-family (005)** | **0.211** |
+
+Cross-family error independence rose again on the reasoning prompt (0.249 → 0.211), and the
+combined figure is below *either* single intervention. **Heterogeneity and prompting buy
+different independence and stack.** That is the cleanest result on this page and the one with
+implications outside this repo: it says a mixed panel and a good prompt are not substitutes.
+
+It also sharpens what went wrong. Independence is not the binding constraint on a mixed panel —
+005 has the most independent errors ever measured here (0.211) and its vote still loses to one
+member by 0.09, p=0.0001. **Competence is the binding constraint, and independence only pays
+once members clear the threshold.** 003 read its failure as a composition problem and was right;
+004 read its success as an independence story and was right; 005 shows independence without
+competence buys nothing at all.
