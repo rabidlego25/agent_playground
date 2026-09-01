@@ -15,6 +15,7 @@ stated hypothesis and a trace someone else could re-analyze.
 | 001 | Does deliberation between agents beat a single agent, at matched tokens? | complete | **No.** 1.85× the cost of non-communicating agents for identical accuracy. One line of prompt beats every arm at a tenth the cost. [README](experiments/001-deliberation/README.md) |
 | 002 | Does rhetorical packaging change what a reader agent does, at equal information? | designed | [README](experiments/002-rhetoric-vs-information/README.md) |
 | 003 | Does a mixed-family panel restore what deliberation destroys? | complete | **Untestable as designed.** The 3-way vote lands below its best member (p=0.007). What survives: deliberation transferred capability to the weakest member (+0.13) without costing the strongest. [README](experiments/003-mixed-panel/README.md) |
+| 004 | Does the ensembling gain survive at the top of the prompt axis? | samples complete, D′ running | **Yes, and it grows.** Voting still beats one sample on the reasoning prompt (p=0.0094); the k=7 gain rose +0.113 → +0.195 because the prompt made errors *more* independent (c 0.339 → 0.239). At matched tokens the k=7 vote goes 0.63 → 0.86. [README](experiments/004-prompt-ceiling/README.md) |
 
 Keep this table current. A repo of fifty experiments with no index is write-only — you re-run what
 you already answered.
@@ -46,6 +47,13 @@ results/       raw run artifacts, append-only
 
 ## Status
 
-Early. Scaffolding and the decision record for what to build first are in place; the shared
-harness (`lib/trace.py`, `lib/tasks.py`, `lib/models.py`) is next, and experiment 001 is blocked
-on it. See `notes/2026-08-29-starting-point-decision.md` for why the build order is what it is.
+Updated 2026-09-01. The shared harness (`lib/trace.py`, `lib/tasks.py`, `lib/models.py`) and the
+instrument probes in `tests/` are in place and calibrated (`reports/2026-08-30-calibration.pdf`:
+task-set variance 0.163, run-to-run 0.050). 001 and 003 are complete; 004 is running; 002 is
+designed and unrun.
+
+Both completed experiments landed on the same open question, which is what 004 is: every
+configuration effect measured so far was measured on a prompt that does not ask the model to
+reason, and one sentence of prompt is worth more than any configuration in the sweep. Until 004
+lands, treat 001's and 003's configuration findings as internally valid and externally
+provisional. See `notes/2026-08-30-prompt-dominates-configuration.md`.

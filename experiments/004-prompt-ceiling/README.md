@@ -1,6 +1,10 @@
 # 004 — Does the ensembling gain survive at the top of the prompt axis?
 
-**Status:** pre-registered 2026-09-01, samples phase running. **No results yet.**
+**Status:** samples phase complete (2026-09-01); arm D′ running.
+**Hypotheses were pre-registered and committed (9865633) before any arm was run.**
+**Result: H1 confirmed — 001's ensembling finding survives the prompt fix. H2 and H3
+both rejected: the gain grew rather than shrank, because the reasoning prompt made
+errors *more* independent, not less.**
 
 ## Question
 
@@ -86,3 +90,121 @@ worth its cost, given B1n alone reaches 0.72 for 51,898 tokens?**
   uncorrelated errors and left the correlated ones", which predicts the same `c′ > c`.
   Distinguishing those needs the per-task error-type breakdown, which the traces support and
   which is an analysis, not another run.
+
+## Results — samples phase (2026-09-01, n=195)
+
+**H1 confirmed. H2 rejected. H3's correlation account rejected.** Both pre-registered
+predictions were wrong, and wrong in the same direction: the two axes compose instead of
+competing.
+
+| arm | acc | 95% CI | tok_in | tok_out | total |
+|---|---|---|---|---|---|
+| A: single sample, bare | 0.51 | [0.44, 0.58] | 31,838 | 21,976 | 53,814 |
+| C: k=3 vote, bare | 0.58 | [0.51, 0.65] | 95,514 | 66,683 | 162,197 |
+| C: k=5 vote, bare | 0.61 | [0.54, 0.68] | 159,190 | 110,792 | 269,982 |
+| C: k=7 vote, bare | 0.63 | [0.56, 0.69] | 222,866 | 153,290 | 376,156 |
+| A′: single sample, B1n | 0.67 | [0.60, 0.73] | 37,688 | 18,021 | 55,709 |
+| C′: k=3 vote, B1n | 0.74 | [0.67, 0.80] | 113,064 | 53,185 | 166,249 |
+| C′: k=5 vote, B1n | 0.83 | [0.77, 0.88] | 188,440 | 87,572 | 276,012 |
+| **C′: k=7 vote, B1n** | **0.86** | [0.81, 0.90] | 263,816 | 122,555 | 386,371 |
+
+Paired exact McNemar, all arms on the same 195 instances:
+
+| contrast | acc | 1st only | 2nd only | p |
+|---|---|---|---|---|
+| A′ vs C′3 | 0.67 → 0.74 | 6 | 20 | **0.0094** |
+| A′ vs C′5 | 0.67 → 0.83 | 2 | 34 | **<0.0001** |
+| A′ vs C′7 | 0.67 → 0.86 | 2 | 40 | **<0.0001** |
+| A bare vs A′ | 0.51 → 0.67 | 28 | 58 | **0.0016** |
+| C3 vs C′3 | 0.58 → 0.74 | 24 | 54 | **0.0009** |
+| C5 vs C′5 | 0.61 → 0.83 | 12 | 55 | **<0.0001** |
+| C7 vs C′7 | 0.63 → 0.86 | 10 | 56 | **<0.0001** |
+
+### H1 — confirmed
+
+Voting still beats a single sample on the reasoning prompt, at every k (p=0.0094 at k=3,
+p<0.0001 at k=5 and 7). **001's H1 is a result about ensembling, not an artifact of a weak
+prompt.** That was the question this experiment was built to answer.
+
+### H2 — rejected. The gain did not shrink; above k=3 it grew
+
+| k | gain bare | gain B1n | delta |
+|---|---|---|---|
+| 3 | +0.072 | +0.072 | +0.000 |
+| 5 | +0.097 | +0.164 | **+0.067** |
+| 7 | +0.113 | +0.195 | **+0.082** |
+
+Identical at k=3 to three decimal places, and *larger* at k=5 and k=7 — both deltas above the
+0.050 run-to-run variance floor. This is a difference of differences read against the noise
+floor as pre-registered, not a formal test, and it is the weakest-supported claim on this page.
+But the direction is unambiguous and it is the opposite of the prediction.
+
+The standard intuition behind H2 — less headroom, so less to gain — is simply not what
+happened. Returns also stopped saturating: on the bare prompt no adjacent-k step above 3 was
+significant, so 001 concluded ensembling saturates at k=3. On the reasoning prompt k=5 and k=7
+keep paying (0.74 → 0.83 → 0.86). **Where the ensembling curve saturates is a property of the
+prompt, not of the ensemble.**
+
+### H3 — the correlation account predicted the wrong sign
+
+| prompt | c = P(second draw repeats the first's answer \| first is wrong) | ordered pairs |
+|---|---|---|
+| bare | **0.339** | 3,912 |
+| B1n | **0.239** | 2,520 |
+
+Errors became *more* independent, not less. Asking the model to reason did not channel every
+sample down one derivation; it removed a class of correlated error — the shared wrong attractor
+that three bare-prompt samples fall into together — and left behind residual errors that are
+closer to independent.
+
+That is why H2 failed, and the two results are one result: **ensembling gains rose because the
+prompt bought back the error independence that a majority vote spends.** Base rate and error
+independence are separate quantities, and a good prompt moves both in the direction voting
+wants.
+
+This does not overturn 001's or 003's correlation findings — it bounds them. Deliberation (001
+arm D), in-context repetition (001 B3n, −0.22), and unequal mixed panels (003) all *spend*
+error independence. A reasoning prompt *buys* it. The mechanism is the same axis; the
+interventions sit on opposite ends of it.
+
+### Consensus became a better signal, on both coverage and reliability
+
+| distinct answers among 3 | bare: tasks | bare: majority correct | B1n: tasks | B1n: majority correct |
+|---|---|---|---|---|
+| 1 (unanimous) | 58 | 0.78 | **97** | **0.90** |
+| 2 | 109 | 0.57 | 76 | 0.68 |
+| 3 | 28 | 0.25 | 22 | 0.23 |
+
+Unanimity coverage rose 0.30 → 0.50 **and** its reliability rose 0.78 → 0.90. This is the exact
+contrast to 001's H3, where deliberation raised coverage 0.30 → 0.48 with reliability flat at
+0.78 — more cases labelled confident at no better than the old base rate, i.e. a strictly worse
+signal. Same coverage increase, opposite value. Prompting and deliberation both make a panel
+agree more; only one of them makes agreement mean more.
+
+### The practitioner answer, at matched cost
+
+001 concluded the k=7 vote was not worth 7× a single sample for +0.11. At effectively the same
+token spend the reasoning prompt changes what that money buys:
+
+| | tokens | acc |
+|---|---|---|
+| C7, bare prompt | 376,156 | 0.63 |
+| C′7, B1n prompt | 386,371 | **0.86** |
+
+**+0.23 for +2.7% tokens.** And the cheapest arm here (A′, 55,709 tokens, 0.67) still beats the
+most expensive bare-prompt arm (C7, 376,156 tokens, 0.63) — 001's headline finding survives
+intact. The ordering to draw from both experiments: fix the prompt first, because it is free and
+it raises the ceiling everything else operates under; *then* ensemble, because ensembling works
+better after it.
+
+### Run-to-run replicate on the headline number
+
+A′ (0.67, seed block +300) against 001's B1n arm (0.718, seed block +203) — same prompt, same
+model, same 195 tasks, different draws. **Δ=0.046, at the 0.050 calibration variance floor.**
+The pre-registration said this replicate came free with the seed-block choice; it is reported
+because a single measurement of 0.72 would have overstated the single-sample rate by about one
+noise unit. Neither figure is the "true" B1n rate; the interval is roughly 0.67–0.72.
+
+### Status of H4
+
+Arm D′ (deliberation on the reasoning prompt) is running. Not reported here.
