@@ -33,6 +33,25 @@ def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
     return (max(0.0, c - h), min(1.0, c + h))
 
 
+
+def mcnemar(a: list[bool], b: list[bool]) -> tuple[int, int, float]:
+    """Exact McNemar on paired outcomes. Returns (a_only, b_only, two-sided p).
+
+    Arms in this repo run on identical task instances, so the marginal intervals are the
+    wrong test -- task-set variance (0.163) is three times run-to-run variance (0.050),
+    and a paired test removes it. Exact rather than chi-square because the discordant
+    count is routinely under 25.
+    """
+    if len(a) != len(b):
+        raise ValueError(f"unpaired: {len(a)} vs {len(b)}")
+    x = sum(1 for u, v in zip(a, b) if u and not v)
+    y = sum(1 for u, v in zip(a, b) if v and not u)
+    n = x + y
+    if n == 0:
+        return x, y, 1.0
+    tail = sum(math.comb(n, i) for i in range(min(x, y) + 1)) / (2 ** n)
+    return x, y, min(1.0, 2 * tail)
+
 @dataclass
 class Cell:
     """One condition of a probe: a set of tasks run under one configuration."""
