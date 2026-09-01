@@ -57,8 +57,21 @@ Running list. Add freely; mark ones that become experiments with their experimen
 
 Open:
 
-- Does the ensembling gain survive at the top of the prompt axis, or was it compensating for
-  a bad prompt? Re-running the C curve on the B1n prompt answers this and is queued.
+- ~~Does the ensembling gain survive at the top of the prompt axis, or was it compensating for
+  a bad prompt?~~ **[004] Answered 2026-09-01: it survives and grows.** The gain is identical at
+  k=3 (+0.072) and larger at k=5/7 (+0.067, +0.082) on the reasoning prompt. The reason is the
+  surprise: error independence *rose* (conditional-on-wrong agreement 0.339 → 0.239), so base
+  rate and ensembling return moved together. Deliberation on the same prompt went from
+  uneconomic to significantly harmful (0.71 vs C′7's 0.86, p<0.0001).
+- **[004 opens]** Where does the C′ curve saturate? k=7 was the pre-registered maximum and it
+  had not flattened (0.74 → 0.83 → 0.86); the bare-prompt curve saturated at k=3. One cheap
+  sweep at k∈{9,11,15}.
+- **[004 opens]** Is `c` — conditional-on-wrong agreement — measurable from k=3 draws? If so it
+  forecasts the ensembling return and makes "should I ensemble this workload" a cheap
+  measurement instead of a full curve.
+- **[004 opens]** Does the sign flip hold for other prompt interventions, or is step-by-step
+  reasoning special? Few-shot examples plausibly go the other way, by supplying a shared
+  template that makes errors *more* correlated.
 - Is "find the prompt ceiling first" tractable in general, or does it just move the search
   cost around? Finding the ceiling took three tries here, two of which produced confounded
   arms that scored plausibly.
@@ -80,4 +93,12 @@ Open:
 - Is willingness to adopt a peer answer a stable model property? Mistral adopted 56% and gained
   0.13; llama adopted 35% and lost 0.03. One observation each.
 - Where is the Condorcet threshold once every member is prompted at its ceiling rather than
-  0.21 below it? All of 003's solo rates were measured on the bare prompt.
+  0.21 below it? All of 003's solo rates were measured on the bare prompt. **[004] qwen2.5
+  moved 0.51 → 0.67 on the reasoning prompt; if llama3.1 and mistral move comparably the mixed
+  panel may clear the threshold 003 failed. This is now the cheapest live follow-up.**
+- **[004] partly retired:** "a composition where the strong side is not outvoted would capture
+  the capability transfer" assumes there is transfer to capture. On the reasoning prompt there
+  is none — deliberation produced 97 wrong→right against 97 right→wrong, net exactly zero,
+  against 001's +36. A peer answer is informative to an agent that has not worked the chain and
+  noise to one that has. Whether 003's +0.13 for mistral survives its own prompt fix is the
+  open part.

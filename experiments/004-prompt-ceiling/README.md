@@ -1,6 +1,6 @@
 # 004 — Does the ensembling gain survive at the top of the prompt axis?
 
-**Status:** samples phase complete (2026-09-01); arm D′ running.
+**Status:** complete (2026-09-01).
 **Hypotheses were pre-registered and committed (9865633) before any arm was run.**
 **Result: H1 confirmed — 001's ensembling finding survives the prompt fix. H2 and H3
 both rejected: the gain grew rather than shrank, because the reasoning prompt made
@@ -205,6 +205,97 @@ The pre-registration said this replicate came free with the seed-block choice; i
 because a single measurement of 0.72 would have overstated the single-sample rate by about one
 noise unit. Neither figure is the "true" B1n rate; the interval is roughly 0.67–0.72.
 
-### Status of H4
+## Results — arm D′ (2026-09-01, n=195)
 
-Arm D′ (deliberation on the reasoning prompt) is running. Not reported here.
+**H4 confirmed, and more strongly than in 001.** On the bare prompt deliberation was merely
+not worth its cost. On the reasoning prompt it is *actively worse* than the non-communicating
+control at two of three k, while costing more than any of them.
+
+| arm | acc | 95% CI | tok_in | tok_out | total |
+|---|---|---|---|---|---|
+| A′: single sample | 0.67 | [0.60, 0.73] | 37,688 | 18,021 | 55,709 |
+| C′: k=3 vote | 0.74 | [0.67, 0.80] | 113,064 | 53,185 | 166,249 |
+| C′: k=5 vote | 0.83 | [0.77, 0.88] | 188,440 | 87,572 | 276,012 |
+| C′: k=7 vote | **0.86** | [0.81, 0.90] | 263,816 | 122,555 | **386,371** |
+| D′: k=3 + 1 revision | 0.71 | [0.65, 0.77] | 355,305 | 108,025 | **463,330** |
+
+| contrast | acc | 1st only | 2nd only | p |
+|---|---|---|---|---|
+| C′3 vs D′ | 0.74 → 0.71 | 23 | 18 | 0.533 |
+| C′5 vs D′ | 0.83 → 0.71 | 31 | 8 | **0.0003** |
+| C′7 vs D′ | 0.86 → 0.71 | 34 | 5 | **<0.0001** |
+
+D′ is the most expensive arm in the experiment (463,330 tokens) and the third least accurate.
+It costs 1.20× C′7 to land 0.15 below it, and 8.3× A′ to land 0.04 above it. In 001 the honest
+statement was "1.85× the cost for identical accuracy"; here it is **1.20× the cost of C′7 for
+significantly worse accuracy**.
+
+### The individual-correction effect is gone
+
+001's most interesting sub-result was that deliberation made individual agents better — 129
+wrong→right against 93 right→wrong, net **+36** across 585 agent-slots — while the vote
+captured none of it, because the flips were correlated. On the reasoning prompt:
+
+| individual move | 001 (bare) | 004 (B1n) |
+|---|---|---|
+| wrong → right | 129 | **97** |
+| right → wrong | 93 | **97** |
+| wrong → wrong | 70 | 36 |
+| unchanged | 293 | 355 |
+| **net correction** | **+36** | **0** |
+| changed answer | 50% | 39% |
+
+Exactly 97 against 97. Deliberation on the reasoning prompt is **pure churn**: 230 of 585
+agent-slots changed their answer and the net effect on individual accuracy is zero to the
+integer. There is nothing left for a better voting rule to cash, which retires the "a
+composition where the strong side is not outvoted would capture it" follow-up from 003 *for
+this prompt* — the thing that follow-up was designed to capture does not exist here.
+
+This is the same story as H3 from a different angle. A peer's answer is informative to an agent
+that has not worked the chain, and roughly noise to one that has. 003 saw the strong version of
+this: mistral gained +0.13 from reading peers because it had no derivation of its own. The
+reasoning prompt gives every agent its own derivation, and the peer channel goes from
+informative to corrosive.
+
+### Consensus degrades the way 001's did
+
+| distinct answers among 3 | pre: tasks | pre: correct | post: tasks | post: correct |
+|---|---|---|---|---|
+| 1 (unanimous) | 97 | 0.90 | 106 | 0.89 |
+| 2 | 76 | 0.68 | 78 | 0.54 |
+| 3 | 22 | 0.23 | 11 | 0.27 |
+
+Nine more tasks look unanimous and reliability is flat — the identical pattern to 001's H3
+(coverage up, reliability unmoved), just milder because there was less independence left to
+spend. Post-deliberation consensus is again a strictly worse signal than pre-deliberation
+consensus.
+
+## What 004 settles
+
+1. **001's ensembling result is real.** It survives the prompt fix and gets larger (H1, H2).
+2. **001's deliberation result is real and understated.** At the prompt ceiling, deliberation
+   is not merely uneconomic — it is worse than not communicating, significantly, at higher cost
+   (H4).
+3. **The correlation account needs a sign flip.** Error independence is not a fixed budget that
+   configurations spend. A prompt can *buy* it (c 0.339 → 0.239), which is why the two axes
+   compose rather than trade off (H3).
+4. **The build order follows from 3.** Fix the prompt first — it is free, it raises the base
+   rate, and it raises the return on everything downstream. Then ensemble without
+   communication. Do not deliberate.
+
+## Follow-ups this opens
+
+- **Where does the C′ curve saturate?** k=7 was the pre-registered maximum and it had not
+  flattened (0.74 → 0.83 → 0.86). The bare-prompt curve saturated at k=3; this one has no
+  measured ceiling, and finding it is one cheap sweep at k∈{9,11,15}.
+- **Is `c` predictable before the sweep?** If conditional-on-wrong agreement can be measured
+  from k=3 draws, it forecasts the ensembling return and turns "should I ensemble this
+  workload" into a cheap measurement rather than a full curve.
+- **Does the sign flip hold for other prompt interventions,** or is step-by-step reasoning
+  special? Few-shot examples and self-verification are the two obvious next probes, and they
+  plausibly go the other way: examples might make errors *more* correlated by supplying a
+  shared template.
+- **003 rerun at the ceiling.** All three local models were measured 0.21 below their prompt
+  ceiling, and the Condorcet threshold question was decided by that. qwen2.5 alone moved
+  0.51 → 0.67; if llama3.1 and mistral move comparably the mixed panel may clear the threshold
+  that 003 failed.
