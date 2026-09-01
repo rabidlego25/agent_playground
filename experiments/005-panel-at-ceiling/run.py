@@ -74,12 +74,32 @@ def round_one(model: str) -> dict:
             for e in read(RUNS / f"005_samples_{slug(model)}.jsonl")}
 
 
+def _done(stem: str) -> set[str]:
+    """task_ids already written for this phase.
+
+    TraceWriter is append-only, so a phase that dies partway cannot simply be re-run --
+    it would duplicate every task it had already done. Skipping ids already on disk makes
+    a phase idempotent and a kill cost at most the task in flight, without rewriting or
+    truncating anything. Two of these runs were killed mid-phase on 2026-09-01; the
+    prefix from the first is kept under runs/interrupted/ rather than resumed, because it
+    predates this guard.
+    """
+    f = RUNS / f"{stem}.jsonl"
+    if not f.exists():
+        return set()
+    return {e["task_id"] for e in read(f)}
+
+
 def phase_samples(model: str) -> None:
     if model == PANEL[0]:
         sys.exit("qwen2.5's B1n draw is reused from 004; do not redraw it")
+    stem = f"005_samples_{slug(model)}"
+    seen = _done(stem)
     b = require(model)
-    w = TraceWriter(f"005_samples_{slug(model)}", results_dir=RUNS)
+    w = TraceWriter(stem, results_dir=RUNS)
     for i, t in enumerate(tasks()):
+        if t.task_id in seen:
+            continue
         prompt = B1N.format(original=t.prompt)
         c = b.complete(prompt, temperature=TEMP, max_tokens=MAX_TOK,
                        seed=t.seed * 10 + SEED_SAMPLES)
@@ -102,11 +122,15 @@ def phase_samples(model: str) -> None:
 
 
 def phase_deliberate(model: str) -> None:
+    stem = f"005_delib_{slug(model)}"
+    seen = _done(stem)
     b = require(model)
     j = PANEL.index(model)
     r1 = [round_one(m) for m in PANEL]
-    w = TraceWriter(f"005_delib_{slug(model)}", results_dir=RUNS)
+    w = TraceWriter(stem, results_dir=RUNS)
     for i, t in enumerate(tasks()):
+        if t.task_id in seen:
+            continue
         peers = "\n\n".join(f"Assistant {chr(65 + m)} said:\n{r1[m][t.task_id]['action']}"
                             for m in range(len(PANEL)) if m != j)
         prompt = PEER_TEMPLATE.format(original=t.prompt, peers=peers)
