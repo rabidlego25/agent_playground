@@ -50,11 +50,31 @@ from the session log, so the panels are matched on calls rather than on nominal 
 
 ## Task family and oracle
 
-**Small self-contained repair tasks with hidden unit tests.** Pass = the hidden tests pass.
-Binary, programmatic, no judge — the repo has no result yet on whether an LLM judge can be
-trusted here, and `experiments/002-rhetoric-vs-information/` exists precisely because the
+**`lib/worlds/repair.py`** (built 2026-09-10). A generated workspace: a small Python module
+with one injected defect, a task statement, and a visible smoke suite. Pass = a hidden suite
+passes. Binary, programmatic, no judge — the repo has no result yet on whether an LLM judge can
+be trusted here, and `experiments/002-rhetoric-vs-information/` exists precisely because the
 suspicion is that judges reward confident packaging. Do not introduce one as the primary
 measure.
+
+Three properties make it a repair task rather than a test-running task, and
+`tests/probe_repair_world.py` asserts all of them on every instance before any run:
+
+- the hidden suite fails on the workspace as shipped;
+- **the visible smoke suite passes on it** — so running the shipped tests does not locate the
+  bug, and the work is in reading the specification against the code;
+- the hidden suite passes on the reference source, so the oracle is not measuring its own bugs.
+
+The hidden tests are never written into the workspace. `check()` copies the workspace, deletes
+any `test_*.py` the agent left behind, and runs the suite there — an agent with write access can
+edit any test it can see, and in this design it will have write access.
+
+**Stated limitation: the pool is 12 distinct defects** (3 modules × 4 mutation operators), so
+n=40 draws repeats. Paired comparisons across arms remain valid — every arm sees the same
+instances — but the instances are not independent, and the effective n for any claim about
+*repair tasks in general* is 12, not 40. Parameterising the templates (constants, grid shapes,
+transaction sequences) is the fix, and it should happen before the main run if 007 is to say
+anything beyond "on these twelve defects".
 
 n=40 instances, identical across arms, all comparisons paired (exact McNemar), Wilson intervals
 on the marginals. n is small and stated: this is a token-expensive design and 40 paired
