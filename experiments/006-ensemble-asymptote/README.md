@@ -1,8 +1,9 @@
 # 006 — Where does the ensembling curve saturate on the reasoning prompt, and does `c` predict it?
 
-**Status:** pre-registered 2026-09-01 (commit `b57eac6`); sampling sweep in progress, 51/195
-tasks drawn, stopped by request and resumable. **Prediction and estimator fixed in this file
-and committed before any draw was taken.** No result yet.
+**Status:** complete 2026-09-10. Pre-registered 2026-09-01 (commit `b57eac6`); the sweep ran
+51/195 on 2026-09-01 and the remaining 144 on 2026-09-10. **Prediction and estimator were fixed
+in this file and committed before any draw was taken.** Result: **k=15 = 0.877, inside the
+pre-registered band — but the band could not discriminate its own named alternative.**
 
 ## Question
 
@@ -113,3 +114,76 @@ is significant.
 - **Single task family**, as in 001, 003, 004 and 005.
 - Temperature is fixed at 0.7. The asymptote is a property of the sampling distribution, so it
   is a temperature result as much as a prompt result, and no temperature sweep is run here.
+
+## Result (2026-09-10)
+
+n=195, qwen2.5, B1n, temp 0.7, 15 draws per task (004's seven + eight new). New draws bound the
+800-token cap on 0/1560 (0.0%), matching 004's 0/1365. The k≤7 prefix reproduces 004 exactly.
+
+| k | acc | 95% CI | total tokens |
+|---|---|---|---|
+| 1 | 0.667 | [0.60, 0.73] | 55,709 |
+| 3 | 0.738 | [0.67, 0.80] | 166,249 |
+| 5 | 0.831 | [0.77, 0.88] | 276,012 |
+| 7 | 0.862 | [0.81, 0.90] | 386,371 |
+| 9 | 0.851 | [0.79, 0.89] | 496,592 |
+| 11 | 0.872 | [0.82, 0.91] | 607,428 |
+| **15** | **0.877** | [0.82, 0.92] | 828,464 |
+
+Adjacent-k, paired exact McNemar on the same 195 instances:
+
+| step | | discordant | p |
+|---|---|---|---|
+| k=1 → 3 | 0.667 → 0.738 | 6 / 20 | **0.0094** |
+| k=3 → 5 | 0.738 → 0.831 | 0 / 18 | **<0.0001** |
+| k=5 → 7 | 0.831 → 0.862 | 3 / 9 | 0.146 |
+| k=7 → 9 | 0.862 → 0.851 | 5 / 3 | 0.727 |
+| k=9 → 11 | 0.851 → 0.872 | 2 / 6 | 0.289 |
+| k=11 → 15 | 0.872 → 0.877 | 3 / 4 | 1.000 |
+
+### H1 held, and the test was not sharp
+
+k=15 = **0.877** against a pre-registered 0.89 [0.86, 0.93]. Inside the band.
+
+That is a weaker result than it looks, and the weakness is in the pre-registration, not the
+data. The named alternative was the plug-in estimator's **0.862** — which is *also inside the
+band*. Measured 0.877 sits 0.013 from the prediction and 0.015 from the alternative: a tie. The
+run cannot say which estimator was right, so **`c` still has not had a discriminating
+out-of-sample test.** The third outcome (>0.93, both estimators biased low) is excluded, which
+is the one thing the band did settle.
+
+**Rule for the next pre-registration in this repo: the band must exclude the rival estimator.
+A band that contains both predictions cannot be wrong and therefore cannot be informative.**
+
+### Saturation is at k=5, and 004 overstated the gap
+
+The first k after which no later step is significant is **k=5** (5→7 p=0.146, and nothing
+after). 004 said the B1n curve "was still climbing at its pre-registered maximum" and concluded
+that where the curve saturates is a property of the prompt. With the full curve in hand:
+
+- The claim survives in direction — bare saturates at k=3, B1n at k=5.
+- It was overstated in size. One step, not a wide margin. What the prompt moved much further is
+  the *level*: 0.63 → 0.877 at the plateau.
+- k=7 → 9 is a non-significant *dip* (0.862 → 0.851). 004's k=7 point sat on the high side of a
+  plateau it had already reached, which is why it read as still climbing.
+
+### Plurality, not sampling, is now the bottleneck
+
+The correct answer appears in at least one of the 15 draws on **0.979** of tasks. Voting reaches
+0.877. **The 0.102 gap is what majority selection discards after sampling has already found the
+answer** — larger than anything remaining on the k axis, and it does not shrink by drawing more.
+For this task, the next gain is in selection or verification, not in more samples.
+
+Cost says the same: k=15 buys +0.015 over k=7 for 2.1× the tokens (828k vs 386k). k=5 at 276k
+tokens is 95% of the accuracy for a third of the spend.
+
+### What this changes
+
+- The recommended pipeline out of 001–005 — fix the prompt, ensemble without communication —
+  now has a measured ceiling on this task: **~0.88 for qwen2.5 7B at temp 0.7 on B1n**, against
+  a 0.979 oracle ceiling. A 7B local model with a good prompt and five samples is competitive
+  here; the remaining 0.10 needs a different mechanism, not a bigger k.
+- `c` is not yet validated as a predictive variable. It remains a good description of what
+  003/004/005 measured and an untested basis for forecasting.
+- The k=9 dip and the 0.979 oracle ceiling both come free from traces that are now on disk;
+  neither required a new draw.

@@ -17,7 +17,7 @@ stated hypothesis and a trace someone else could re-analyze.
 | 003 | Does a mixed-family panel restore what deliberation destroys? | complete | **Untestable as designed.** The 3-way vote lands below its best member (p=0.007). What survives: deliberation transferred capability to the weakest member (+0.13) without costing the strongest. [README](experiments/003-mixed-panel/README.md) |
 | 004 | Does the ensembling gain survive at the top of the prompt axis? | complete | **Yes, and it grows.** Voting still beats one sample on the reasoning prompt (p=0.0094) and the k=7 gain rose +0.113 → +0.195, because the prompt made errors *more* independent (c 0.339 → 0.239). Deliberation is now significantly *worse* than not communicating (0.71 vs 0.86, p<0.0001) at 1.2× the cost. [README](experiments/004-prompt-ceiling/README.md) |
 | 005 | Does the mixed panel clear the Condorcet threshold once every member is prompted at its ceiling? | complete | **No, and the prompt made it worse.** The gain does not transfer: qwen2.5 +0.154, mistral +0.108, llama3.1 −0.026. The vote now loses to its best member by 0.09 (p=0.0001) vs 0.08 in 003. Cross-family error independence stacks with prompting (c 0.249 → 0.211) — but independence without competence buys nothing. Deliberation cost the strongest member −0.123, where neither intervention alone cost it anything. [README](experiments/005-panel-at-ceiling/README.md) |
-| 006 | Where does the ensembling curve saturate on the reasoning prompt, and does `c` predict it? | pre-registered, running | Prediction committed before any draw: k=15 = **0.89** [0.86, 0.93], with the plug-in estimator's ≤0.87 named as the alternative. The first out-of-sample test of `c`, the variable 003/004/005 all explain their results with. [README](experiments/006-ensemble-asymptote/README.md) |
+| 006 | Where does the ensembling curve saturate on the reasoning prompt, and does `c` predict it? | complete | **0.877 at k=15 — inside the pre-registered band [0.86, 0.93], but the band also contained the named alternative (0.862), so `c` got no discriminating test.** Saturation is at k=5, one step later than bare, not the wide margin 004 implied. The answer is in at least one of 15 draws on **0.979** of tasks: plurality, not sampling, is now the bottleneck. [README](experiments/006-ensemble-asymptote/README.md) |
 | 007 | Does role-specialised inter-agent routing beat one well-prompted agent, on a tool-using task? | designed | Out-of-sample test of 001–005 against a deployed 9-agent OpenClaw config. Committed before any run: **C > A > B** — parallel-silent beats one good prompt beats the role panel, which spends ≥3× the tokens. [README](experiments/007-openclaw-role-routing/README.md) |
 
 Keep this table current. A repo of fifty experiments with no index is write-only — you re-run what
@@ -50,10 +50,10 @@ results/       raw run artifacts, append-only
 
 ## Status
 
-Updated 2026-09-01. The shared harness (`lib/trace.py`, `lib/tasks.py`, `lib/models.py`) and the
+Updated 2026-09-10. The shared harness (`lib/trace.py`, `lib/tasks.py`, `lib/models.py`) and the
 instrument probes in `tests/` are in place and calibrated (`reports/2026-08-30-calibration.pdf`:
-task-set variance 0.163, run-to-run 0.050). 001, 003, 004 and 005 are complete; 006 is
-pre-registered and mid-sweep; 002 is designed and unrun.
+task-set variance 0.163, run-to-run 0.050). 001, 003, 004, 005 and 006 are complete; 002 and 007
+are designed and unrun.
 
 001 and 003 both landed on the same open question — every configuration effect in them was
 measured on a prompt that does not ask the model to reason. 004 closed it: the configuration
@@ -74,16 +74,23 @@ prompt cost it anything on its own.
 See `notes/2026-08-30-prompt-dominates-configuration.md`, `experiments/004-prompt-ceiling/` and
 `experiments/005-panel-at-ceiling/`.
 
-006 is the first attempt to make `c` pay rent. It has carried the argument three times and has
-only ever been measured after the fact; 006 states a number for k=15 first and then measures it.
-Building the prediction already produced one methodological result at zero token cost:
+006 was the first attempt to make `c` pay rent, and it half-failed. k=15 landed at 0.877, inside
+the pre-registered [0.86, 0.93] — but the named alternative, 0.862, was inside that band too, so
+the run could not say which estimator was right. **A band that contains the rival prediction
+cannot be wrong and therefore cannot be informative**; the next pre-registration here has to
+exclude it. What 006 did settle: saturation on B1n is at k=5 (one step later than bare, not the
+wide margin 004 implied), the plateau sits at ~0.88, and the correct answer is present in at
+least one of 15 draws on 0.979 of tasks — so plurality selection, not sampling, is what now
+costs the most. Building the prediction had already produced one methodological result at zero
+token cost:
 bootstrap resampling from a small draw pool under-predicts vote accuracy by 0.12–0.15 when
 extrapolating ~2×, because it cannot reproduce how concentrated the true answer distribution is.
 That disqualified the estimator the pre-registration was going to use, and it was only checkable
 because 004's traces were kept — replay over re-run, paying off directly.
 
-Next: 006's sweep is 51/195 and resumable; 002 is designed and unrun; and 005 owes a
-pre-registered llama3.1 re-run at max_tokens=1600 (the cap bound on 11.8% of tasks — the
+Next: the 0.102 gap between the 0.979 oracle ceiling and the 0.877 vote is the largest thing on
+the table, and it is a selection problem, not a sampling one; 002 and 007 are designed and
+unrun; and 005 owes a pre-registered llama3.1 re-run at max_tokens=1600 (the cap bound on 11.8% of tasks — the
 diagnostic says truncation is not the cause of its null, so this is a confirmation, not a
 decider). 005's −0.123 to the strong member rests on two points, one of which also changes
 family; a gap-dose curve reusing 004's seven qwen draws as peer blocks would separate
