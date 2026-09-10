@@ -1,0 +1,21 @@
+{
+  "models": {
+    "providers": {
+      "gemini": {
+        "baseUrl": "https://generativelanguage.googleapis.com/v1beta/openai",
+        "api": "openai-completions",
+        "auth": "api-key",
+        "apiKey": "__GEMINI_API_KEY__",
+        "timeoutSeconds": 180,
+        "models": [
+          {
+            "id": "gemini-2.5-flash",
+            "name": "gemini-2.5-flash",
+            "contextWindow": 1048576,
+            "maxTokens": 8192
+          }
+        ]
+      }
+    }
+  }
+}
