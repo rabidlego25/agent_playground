@@ -78,8 +78,14 @@ def prepare() -> list[dict]:
     return manifest
 
 
-def run_one(m: dict, model: str, template: str, timeout: int) -> tuple[int, str, str]:
-    """One agent turn in the sandbox. Returns (exit code, stdout, stderr)."""
+def run_one(m: dict, model: str, template: str, timeout: int,
+            lean: bool = False) -> tuple[int, str, str]:
+    """One agent turn in the sandbox. Returns (exit code, stdout, stderr).
+
+    The full tool surface is the default, unlike the pilot. `--local-model-lean` existed
+    there only to squeeze a turn under Groq's 8k TPM; at Flash Lite's 250K TPM the
+    measured 16.7k-token default surface fits with room to spare, and screening arm A on
+    a reduced toolset would understate it and bias the result toward a false floor."""
     ws = Path(m["workspace"])
     state = ws.parent / "state"
     state.mkdir(exist_ok=True)
@@ -92,7 +98,8 @@ def run_one(m: dict, model: str, template: str, timeout: int) -> tuple[int, str,
         "-v", f"{state}:/state",
         IMAGE, "bash", "/entrypoint.sh",
         "--model", model,
-        "--local-model-lean", "--code-mode", "direct",
+        *(["--local-model-lean"] if lean else []),
+        "--code-mode", "direct",
         "--cwd", "/work", "--state-dir", "/state",
         "--timeout", str(timeout), "--json",
         "--message-file", "/work/TASK.md",
@@ -101,7 +108,7 @@ def run_one(m: dict, model: str, template: str, timeout: int) -> tuple[int, str,
     return p.returncode, p.stdout, p.stderr
 
 
-def run(model: str, template: str, budget: int, timeout: int) -> None:
+def run(model: str, template: str, budget: int, timeout: int, lean: bool = False) -> None:
     manifest = prepare()
     writer = TraceWriter("007_screen")
     spent = 0
@@ -117,7 +124,7 @@ def run(model: str, template: str, budget: int, timeout: int) -> None:
 
         t0 = time.time()
         try:
-            rc, out, err = run_one(m, model, template, timeout)
+            rc, out, err = run_one(m, model, template, timeout, lean)
         except subprocess.TimeoutExpired:
             rc, out, err = -1, "", "harness timeout"
         wall = time.time() - t0
@@ -130,7 +137,8 @@ def run(model: str, template: str, budget: int, timeout: int) -> None:
         v = w.check(Path(m["workspace"]))
 
         ep = oc_export.export(state, m["task_id"], m["seed"], arm="A",
-                              config={"model": model, "rc": rc, "wall_s": round(wall, 1)})
+                              config={"model": model, "rc": rc, "lean": lean,
+                                      "wall_s": round(wall, 1)})
         ep.finish(verdict=bool(v.passed))
         # `edited` is the tool-using analogue of 001's format_ok column: an agent that
         # never wrote anything and one that wrote a wrong fix are different failures.
@@ -193,10 +201,12 @@ def main() -> None:
     r.add_argument("--template", default="gemini.template.json")
     r.add_argument("--budget", type=int, default=DEFAULT_BUDGET)
     r.add_argument("--timeout", type=int, default=360)
+    r.add_argument("--lean", action="store_true",
+                   help="reduced tool surface; only needed on a TPM-starved backend")
     sub.add_parser("report")
     a = p.parse_args()
     if a.cmd == "run":
-        run(a.model, a.template, a.budget, a.timeout)
+        run(a.model, a.template, a.budget, a.timeout, a.lean)
     else:
         report()
 

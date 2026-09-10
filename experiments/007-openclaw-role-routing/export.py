@@ -3,22 +3,33 @@
 The README's rule is that a run which cannot be replayed will be paid for twice, and 007
 is the most expensive design in this repo. This is the exporter that rule demands.
 
-**Unvalidated against real data as of 2026-09-10.** The schema below comes from PILOT.md,
-which read it off one observed pilot session; no session SQLite was persisted from that
-pilot, so nothing here has been run against real rows. It is therefore written to fail
-loudly rather than quietly: every event type it does not recognise is counted and
-reported by `describe()`, never dropped. Run `describe()` on the first real session
-before trusting any Episode it produces.
+**Validated against a real session 2026-09-10** (Gemini 3.5 Flash Lite, OpenClaw
+2026.9.3). That validation corrected two claims in PILOT.md, both of which had been
+written from reading one pilot's tables and would have silently corrupted the experiment:
 
-Storage, per PILOT.md:
-  <state-dir>/agents/<agentId>/agent/openclaw-agent.sqlite
-    transcript_events(session_id, seq, event_json)
-      -- message | custom | session | model_change | thinking_level_change
-    trajectory_runtime_events(session_id, seq, run_id, event_json)
-      -- traceSchema "openclaw-trajectory", schemaVersion 1
-      -- session.started | context.compiled | prompt.submitted | model.completed
-         | trace.artifacts | session.ended
-      -- model.completed carries usage, so tokens per call come from here
+  - PILOT.md: "model.completed carries usage, so tokens per call come from here."
+    Both halves are wrong. `model.completed` fires **once per run**, not once per model
+    call -- a two-call run emits one -- so counting it undercounts requests, which is
+    fatal on a tier metered in requests per day. And its usage fields read 0.
+  - The per-request unit is an **assistant message in `transcript_events`**. A run with
+    two `[model-fetch]` calls in the container log produces exactly two of them.
+
+Usage is zero unless the provider config sets `compat.supportsUsageInStreaming: true`.
+OpenClaw auto-detects that from the base URL and guesses wrong for
+generativelanguage.googleapis.com, so every token count in the trace silently reads 0 and
+H2 (the cost hypothesis) becomes unmeasurable while still producing plausible output.
+Verified directly against the API: Gemini returns usage in a stream only when
+`stream_options.include_usage` is sent. See sandbox/config/gemini.template.json.
+
+Storage: <state-dir>/agents/<agentId>/agent/openclaw-agent.sqlite
+
+  transcript_events(seq, event_json)      -- the primary source
+    event.message.role = user | assistant | toolResult
+      assistant  -> one API request; carries usage{input,output,cacheRead,cacheWrite,
+                    totalTokens}, model, provider, stopReason, responseId, and
+                    content[] entries of type toolCall{name,arguments,id}
+      toolResult -> toolName, toolCallId, isError, details
+  trajectory_runtime_events(seq, run_id, event_json)  -- run-level metadata only
 
 Usage:
     uv run experiments/007-openclaw-role-routing/export.py describe <state-dir>
@@ -39,25 +50,35 @@ sys.path.insert(0, str(ROOT))
 
 from lib.trace import Episode  # noqa: E402
 
-# The event that corresponds to one billed API request. Counting these is what makes a
-# request budget enforceable against a metered free tier, so it is named once here.
-MODEL_CALL_EVENT = "model.completed"
+# Tool names that carry inter-agent traffic rather than work on the workspace. H3 is the
+# claim that arm B's failures are more correlated than arm C's, and it is computable only
+# if a message to another agent is distinguishable from a tool call. Confirmed shape:
+# inter-agent sends appear as content entries of type "toolCall" with one of these names.
+# **Still unverified** -- no arm B session has been run. Check against a real nine-agent
+# session before computing H3, and widen this set if the shipped add-on names it
+# differently.
+AGENT_TO_AGENT_TOOLS = {"agentToAgent", "agent_to_agent", "sendToAgent", "mention"}
 
 KNOWN_TRAJECTORY = {
-    "session.started", "context.compiled", "prompt.submitted",
-    MODEL_CALL_EVENT, "trace.artifacts", "session.ended",
+    "session.started", "trace.metadata", "context.compiled", "prompt.submitted",
+    "model.completed", "trace.artifacts", "session.ended",
 }
 
 
 def session_dbs(state_dir: str | Path) -> list[Path]:
     """Every agent's SQLite under a state dir. Arm B has nine agents, so this is a list
-    and not a single path -- that is the whole reason H3 is computable."""
-    return sorted(Path(state_dir).glob("agents/*/agent/openclaw-agent.sqlite"))
+    and not a single path -- that is the whole reason H3 is computable.
+
+    Deduplicated: the same file resolves through more than one glob path when a state dir
+    is bind-mounted, and counting it twice would double every token and request total."""
+    seen: dict[Path, Path] = {}
+    for p in sorted(Path(state_dir).glob("agents/*/agent/openclaw-agent.sqlite")):
+        seen.setdefault(p.resolve(), p)
+    return list(seen.values())
 
 
-def _rows(db: Path, table: str) -> Iterator[dict[str, Any]]:
-    """Yield parsed events, tolerating a table that does not exist. A missing table is a
-    schema guess that was wrong; the caller reports it rather than crashing mid-sweep."""
+def _events(db: Path, table: str) -> Iterator[dict[str, Any]]:
+    """Yield parsed events, tolerating a table that does not exist."""
     con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
     try:
         con.row_factory = sqlite3.Row
@@ -77,31 +98,36 @@ def _rows(db: Path, table: str) -> Iterator[dict[str, Any]]:
         con.close()
 
 
-def _dig(obj: Any, *names: str) -> Any:
-    """First value found under any of `names`, at any depth. The trace schema is known
-    from one observation, so exact key paths are not yet trustworthy; the field names
-    are the more stable part of that observation."""
-    if isinstance(obj, dict):
-        for n in names:
-            if n in obj and obj[n] is not None:
-                return obj[n]
-        for v in obj.values():
-            got = _dig(v, *names)
-            if got is not None:
-                return got
-    elif isinstance(obj, list):
-        for v in obj:
-            got = _dig(v, *names)
-            if got is not None:
-                return got
-    return None
+def _messages(db: Path) -> Iterator[tuple[int, dict[str, Any]]]:
+    for e in _events(db, "transcript_events"):
+        m = e["event"].get("message")
+        if isinstance(m, dict) and m.get("role"):
+            yield e["seq"], m
+
+
+def _tool_calls(msg: dict[str, Any]) -> list[dict[str, Any]]:
+    return [c for c in (msg.get("content") or [])
+            if isinstance(c, dict) and c.get("type") == "toolCall"]
+
+
+def count_model_calls(state_dir: str | Path) -> int:
+    """Billed requests made under this state dir -- one per assistant message.
+
+    This is what makes a request budget enforceable. A free tier metered in requests per
+    day is spent by call count, not by tokens, and `model.completed` undercounts it."""
+    n = 0
+    for db in session_dbs(state_dir):
+        try:
+            n += sum(1 for _, m in _messages(db) if m.get("role") == "assistant")
+        except LookupError:
+            continue
+    return n
 
 
 def describe(state_dir: str | Path) -> dict[str, Any]:
-    """What is actually in these tables. Run this on the first real session before
-    trusting export(): it is the check that separates a schema that was observed from a
-    schema that was assumed."""
-    out: dict[str, Any] = {"dbs": [], "unknown_event_types": Counter()}
+    """What is actually in these tables. Run this against a new provider or a new
+    OpenClaw version before trusting export(): it is what caught both PILOT.md errors."""
+    out: dict[str, Any] = {"dbs": [], "unknown_trajectory_types": Counter()}
     dbs = session_dbs(state_dir)
     if not dbs:
         out["error"] = (f"no agent SQLite under {state_dir} -- "
@@ -109,105 +135,113 @@ def describe(state_dir: str | Path) -> dict[str, Any]:
         return out
     for db in dbs:
         info: dict[str, Any] = {"path": str(db), "agent_id": db.parts[-3]}
-        for table in ("trajectory_runtime_events", "transcript_events"):
-            try:
-                evs = list(_rows(db, table))
-            except LookupError as e:
-                info[table] = {"error": str(e)}
-                continue
-            types = Counter(
-                (e["event"].get("type") or e["event"].get("event") or "?") for e in evs
-            )
-            info[table] = {"rows": len(evs), "types": dict(types)}
-            if table == "trajectory_runtime_events":
-                for t, n in types.items():
-                    if t not in KNOWN_TRAJECTORY:
-                        out["unknown_event_types"][t] += n
-                # One sample of the call event, so its real usage keys are visible
-                # rather than inferred.
-                sample = next((e["event"] for e in evs
-                               if (e["event"].get("type") == MODEL_CALL_EVENT)), None)
-                if sample is not None:
-                    info["model_completed_sample"] = sample
-        out["dbs"].append(info)
-    out["unknown_event_types"] = dict(out["unknown_event_types"])
-    return out
-
-
-def count_model_calls(state_dir: str | Path) -> int:
-    """Billed requests made under this state dir. The request-budget guard reads this
-    after every instance, because a free tier metered in requests per day is spent by
-    call count and not by tokens."""
-    n = 0
-    for db in session_dbs(state_dir):
         try:
-            n += sum(1 for e in _rows(db, "trajectory_runtime_events")
-                     if e["event"].get("type") == MODEL_CALL_EVENT)
-        except LookupError:
-            continue
-    return n
+            msgs = list(_messages(db))
+        except LookupError as e:
+            info["transcript_events"] = {"error": str(e)}
+            msgs = []
+        roles = Counter(m.get("role") for _, m in msgs)
+        assistants = [m for _, m in msgs if m.get("role") == "assistant"]
+        zero_usage = sum(1 for m in assistants
+                         if not (m.get("usage") or {}).get("totalTokens"))
+        info["transcript_events"] = {
+            "messages": len(msgs), "roles": dict(roles),
+            "api_requests": len(assistants),
+            "assistants_with_zero_usage": zero_usage,
+            "tools_called": dict(Counter(
+                c.get("name") for m in assistants for c in _tool_calls(m))),
+        }
+        if assistants and zero_usage == len(assistants):
+            info["WARNING"] = ("all usage is 0 -- set compat.supportsUsageInStreaming on "
+                               "the model row, or every token figure here is fiction")
+        try:
+            traj = list(_events(db, "trajectory_runtime_events"))
+            types = Counter((e["event"].get("type") or "?") for e in traj)
+            info["trajectory_runtime_events"] = {"rows": len(traj), "types": dict(types)}
+            for t, n in types.items():
+                if t not in KNOWN_TRAJECTORY:
+                    out["unknown_trajectory_types"][t] += n
+        except LookupError as e:
+            info["trajectory_runtime_events"] = {"error": str(e)}
+        out["dbs"].append(info)
+    out["unknown_trajectory_types"] = dict(out["unknown_trajectory_types"])
+    return out
 
 
 def export(state_dir: str | Path, task_id: str, seed: int, arm: str,
            config: dict[str, Any] | None = None) -> Episode:
-    """One instance-run as an Episode: every agent's calls, in sequence, with the fields
-    H1-H3 need. Arm B's nine agents collapse into one Episode because the instance, not
-    the agent, is the unit the arms are compared on."""
-    ep = Episode(task_id=task_id, seed=seed,
-                 config={"arm": arm, **(config or {})})
-    unknown: Counter = Counter()
-    capped = False
+    """One instance-run as an Episode: every agent's requests, with the fields H1-H3
+    need. Arm B's nine agents collapse into one Episode because the instance, not the
+    agent, is the unit the arms are compared on -- per-agent detail lives in step meta."""
+    ep = Episode(task_id=task_id, seed=seed, config={"arm": arm, **(config or {})})
+    capped = zero_usage = a2a = 0
+    models: Counter = Counter()
 
     for db in session_dbs(state_dir):
         agent_id = db.parts[-3]
         try:
-            evs = list(_rows(db, "trajectory_runtime_events"))
+            msgs = list(_messages(db))
         except LookupError as e:
             ep.error = f"{ep.error or ''}{e}; "
             continue
-        for e in evs:
-            ev = e["event"]
-            etype = ev.get("type") or ev.get("event") or "?"
-            if etype not in KNOWN_TRAJECTORY:
-                unknown[etype] += 1
-            if etype != MODEL_CALL_EVENT:
+        # Tool outcomes arrive as their own message; index them so each request records
+        # what its calls actually did. A tool that errored and one that was never called
+        # are different failures.
+        results = {m.get("toolCallId"): m for _, m in msgs
+                   if m.get("role") == "toolResult"}
+        for seq, m in msgs:
+            if m.get("role") != "assistant":
                 continue
-            usage = _dig(ev, "usage", "tokenUsage") or {}
-            stop = _dig(ev, "stopReason", "finishReason", "stop_reason")
-            if stop in ("length", "max_tokens", "max_steps"):
-                capped = True
+            u = m.get("usage") or {}
+            if not u.get("totalTokens"):
+                zero_usage += 1
+            calls = _tool_calls(m)
+            names = [c.get("name") for c in calls]
+            if any(n in AGENT_TO_AGENT_TOOLS for n in names):
+                a2a += 1
+            stop = m.get("stopReason")
+            if stop in ("length", "maxTokens", "max_tokens", "maxSteps", "budget"):
+                capped += 1
+            models[m.get("model")] += 1
             ep.step(
-                state_before=None,          # prompts live in transcript_events; the
-                                            # comparison does not need them inline and
-                                            # they would dominate the file size
-                action=_dig(ev, "toolName", "tool_name", "tool"),
-                observation=_dig(ev, "toolStatus", "exitStatus", "status"),
-                tokens_in=int(_dig(usage, "inputTokens", "input_tokens", "promptTokens") or 0),
-                tokens_out=int(_dig(usage, "outputTokens", "output_tokens", "completionTokens") or 0),
-                latency_ms=float(_dig(ev, "durationMs", "latencyMs", "duration_ms") or 0.0),
+                state_before=None,   # prompts are reconstructable from the same table and
+                                     # would dominate the file; the comparison needs counts
+                action=names or None,
+                observation=[
+                    {"tool": (results.get(c.get("id")) or {}).get("toolName") or c.get("name"),
+                     "error": bool((results.get(c.get("id")) or {}).get("isError"))}
+                    for c in calls
+                ] or None,
+                tokens_in=int(u.get("input") or 0),
+                tokens_out=int(u.get("output") or 0),
                 meta={
                     "agent_id": agent_id,
-                    "role": _dig(ev, "agentRole", "role"),
-                    # Recorded per call, not per run: a multi-day run on a free tier can
-                    # have an alias move under it, and that has to be visible afterwards.
-                    "model": _dig(ev, "modelId", "model", "model_id"),
-                    "run_id": e.get("run_id"),
-                    "session_id": e.get("session_id"),
+                    "seq": seq,
+                    # Recorded per request, not per run: a free-tier run spans days at
+                    # 500 RPD, so an alias can move mid-run and that must stay visible.
+                    "model": m.get("model"),
+                    "provider": m.get("provider"),
+                    "response_id": m.get("responseId"),
                     "stop_reason": stop,
-                    # H3 is not computable without this field. It is a guess at the key
-                    # name until a real arm B session is inspected -- see PILOT.md,
-                    # "what is still unpinned".
-                    "agent_to_agent": bool(_dig(ev, "agentToAgent", "agent_to_agent")),
+                    "cache_read": u.get("cacheRead"),
+                    "cache_write": u.get("cacheWrite"),
+                    "total_tokens": u.get("totalTokens"),
+                    "agent_to_agent": any(n in AGENT_TO_AGENT_TOOLS for n in names),
                 },
             )
 
-    ep.config["capped"] = capped          # a truncated loop and a failed one are
-                                          # different failures; the README requires the
-                                          # distinction be recorded, not inferred
-    ep.config["agents_seen"] = len(session_dbs(state_dir))
-    ep.config["model_calls"] = len(ep.steps)
-    if unknown:
-        ep.config["unknown_event_types"] = dict(unknown)
+    ep.config.update({
+        "agents_seen": len(session_dbs(state_dir)),
+        "api_requests": len(ep.steps),
+        # A truncated loop and a failed one are different failures; the README requires
+        # the distinction be recorded rather than inferred.
+        "capped_steps": capped,
+        "agent_to_agent_steps": a2a,
+        "models_used": dict(models),
+    })
+    if zero_usage:
+        ep.config["zero_usage_steps"] = zero_usage
+        ep.config["usage_suspect"] = (zero_usage == len(ep.steps))
     return ep
 
 
@@ -226,8 +260,8 @@ def main() -> None:
     if a.cmd == "describe":
         print(json.dumps(describe(a.state_dir), indent=2, default=str))
     else:
-        ep = export(a.state_dir, a.task_id, a.seed, a.arm)
-        print(json.dumps(ep.to_dict(), indent=2, default=str))
+        print(json.dumps(export(a.state_dir, a.task_id, a.seed, a.arm).to_dict(),
+                         indent=2, default=str))
 
 
 if __name__ == "__main__":
