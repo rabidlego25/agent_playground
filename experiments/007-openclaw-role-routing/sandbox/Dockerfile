@@ -1,0 +1,27 @@
+# OpenClaw sandbox for 007.
+#
+# The runtime has read/exec/edit/write core tools and can drive a browser and send mail.
+# It does not run on the host: this repo's machine holds every trace in results/, and an
+# agent loop with exec is not something to point at it. No channel bindings are configured
+# here -- arm B's inter-agent traffic goes through agentToAgent, which is what 007 measures;
+# the messaging surface is not under test and is not attached.
+#
+# Node 24 is recommended upstream, 22.19+ supported.
+FROM node:24-bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git python3 python3-venv ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN npm install -g openclaw@latest
+
+# Unprivileged. The agent's blast radius is /work and nothing else.
+RUN useradd -m -u 1001 agent && mkdir -p /work && chown agent:agent /work
+USER agent
+WORKDIR /work
+
+ENV OPENCLAW_HOME=/home/agent/.openclaw \
+    PYTHONDONTWRITEBYTECODE=1
+
+# Pinned at pilot time against the real CLI surface, not guessed from docs.
+CMD ["bash"]
