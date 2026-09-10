@@ -15,7 +15,19 @@ properties of every generated instance, with no model involved:
 
 Property 4 also covers the case that matters most in an agent setting: an agent with write
 access deleting or rewriting the tests that judge it.
+
+Since the 2026-09-10 parameterisation it also asserts two properties of the *pool*, because
+007's screen failed on pool design rather than on any single instance:
+
+5. no mutation operator is dead -- one that can never satisfy the visible/hidden constraint
+   is never drawn, and three of them silently were. Two (`max(start, end)`, `abs(end -
+   start)`) were no-ops on data where end >= start: not bugs at all, just unreachable cells
+   that made the pool look wider than it was.
+6. the pool is wide enough that a run of n instances is close to n independent draws. The
+   number reported is the distinct-cell count at n=40, which is what "effective n" means
+   here and what the 12-cell pool could not deliver.
 """
+import random
 import subprocess
 import sys
 import tempfile
@@ -25,6 +37,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib.worlds import generate                                   # noqa: E402
+from lib.worlds.repair import (                                   # noqa: E402
+    MIN_VISIBLE, REPAIR_TEMPLATES, _call, _load, cell_id)
 
 N = 60
 
@@ -72,14 +86,51 @@ if __name__ == "__main__":
             if w.check(root).passed:
                 failures.append(f"{w.task_id}: passes after the agent neutered the tests")
 
-    print(f"repair world -- {N} instances, {len(seen)} distinct template/mutation cells")
+    # --- property 5: no operator is unreachable -------------------------------------
+    dead = []
+    for tpl in REPAIR_TEMPLATES:
+        reachable: set[str] = set()
+        offered: set[str] = set()
+        for s in range(120):
+            rng = random.Random(s)
+            p = tpl.draw(rng)
+            ref = tpl.render(p)
+            edges, drawn = tpl.edges(p), tpl.cases(rng, p)
+            want = [("ok", tpl.oracle(p, fn, a)) for fn, a in edges + drawn]
+            ne = len(edges)
+            for label, find, repl in tpl.mutations(p):
+                offered.add(label)
+                if find not in ref:
+                    continue
+                try:
+                    bns = _load(ref.replace(find, repl, 1), tpl.name)
+                except Exception:                                  # noqa: BLE001
+                    continue
+                got = [_call(bns, fn, a) for fn, a in edges + drawn]
+                vis = [i for i in range(len(got)) if got[i] == want[i] and i >= ne][:4]
+                differ = [i for i in range(len(got)) if got[i] != want[i]]
+                hid = list(range(ne)) + [i for i in differ if i >= ne][:4]
+                if len(vis) >= MIN_VISIBLE and any(i in hid for i in differ):
+                    reachable.add(label)
+        for label in sorted(offered - reachable):
+            dead.append(f"{tpl.name}/{label}: never satisfies the visible/hidden constraint")
+
+    # --- property 6: the pool is wide enough that n draws are ~n independent ----------
+    cells_40 = {cell_id(generate(s)) for s in range(40)}
+    cells_all = {cell_id(generate(s)) for s in range(N)}
+
+    print(f"repair world -- {N} instances, {len(seen)} distinct template/operator pairs")
     for cell, k in sorted(seen.items()):
-        print(f"  {cell:24s} {k:3d}")
+        print(f"  {cell:26s} {k:3d}")
     print(f"  hidden cases per instance: min {min(cases)}, max {max(cases)}")
+    print(f"\n  distinct (template, spec, operator) cells: {len(cells_all)}/{N} seeds")
+    print(f"  effective n at the 007 run size:            {len(cells_40)}/40")
+    if dead:
+        failures.extend(dead)
 
     if failures:
         print(f"\n{len(failures)} PROBLEMS:")
         for f in failures[:20]:
             print(f"  {f}")
         sys.exit(1)
-    print("\n  all four oracle properties hold on every instance.")
+    print("\n  all six properties hold: four on every instance, two on the pool.")
