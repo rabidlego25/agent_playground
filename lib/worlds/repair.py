@@ -71,6 +71,11 @@ MIN_VISIBLE = 2
 MIN_DISCRIMINATING = 1
 N_CANDIDATES = 26
 
+# Fraction of seeds that prefer a defect spanning several edits. Raised from an implicit
+# 0 after 007's screen put arm A at 0.90 on single-line mutations (SCREEN.md): a one-line
+# fix is findable once the specification is read, so the pool could not separate arms.
+MULTI_EDIT_RATE = 0.6
+
 
 @dataclass
 class Verdict:
@@ -197,7 +202,7 @@ class _Template:
     draw: Callable[[random.Random], dict]
     render: Callable[[dict], str]
     statement: Callable[[dict], str]
-    mutations: Callable[[dict], list[tuple[str, str, str]]]   # (label, find, replace)
+    mutations: Callable[[dict], list[tuple[str, list]]]   # (label, [(find, replace)..])
     oracle: Callable[[dict, str, tuple], Any]
     edges: Callable[[dict], list[tuple[str, tuple]]]
     cases: Callable[[random.Random, dict], list[tuple[str, tuple]]]
@@ -256,28 +261,35 @@ signatures.
 """
 
 
-def _intervals_mutations(p: dict) -> list[tuple[str, str, str]]:
+def _intervals_mutations(p: dict) -> list[tuple[str, list]]:
     op = "<=" if p["touching"] else "<"
     flipped = "<" if p["touching"] else "<="
+    BOUNDARY = (f"if start {op} out[-1][1]:", f"if start {flipped} out[-1][1]:")
+    NO_MAX = ("out[-1][1] = max(out[-1][1], end)", "out[-1][1] = end")
+    UNSORTED = ("ordered = sorted(spans, key=lambda s: s[0])", "ordered = list(spans)")
+    COVERED_RAW = ("return sum(end - start for start, end in merge(spans))",
+                   "return sum(end - start for start, end in spans)")
     return [
-        ("boundary", f"if start {op} out[-1][1]:", f"if start {flipped} out[-1][1]:"),
-        ("no-max", "out[-1][1] = max(out[-1][1], end)", "out[-1][1] = end"),
-        ("unsorted", "ordered = sorted(spans, key=lambda s: s[0])",
-         "ordered = list(spans)"),
-        ("covered-raw", "return sum(end - start for start, end in merge(spans))",
-         "return sum(end - start for start, end in spans)"),
-        ("sort-by-end", "ordered = sorted(spans, key=lambda s: s[0])",
-         "ordered = sorted(spans, key=lambda s: s[1])"),
+        ("boundary", [BOUNDARY]),
+        ("no-max", [NO_MAX]),
+        ("unsorted", [UNSORTED]),
+        ("covered-raw", [COVERED_RAW]),
+        # Multi-edit: each edit alone leaves the module still failing, so a fix that
+        # changes one line and stops does not pass. Generation verifies that.
+        ("boundary+no-max", [BOUNDARY, NO_MAX]),
+        ("unsorted+covered", [UNSORTED, COVERED_RAW]),
+        ("sort-by-end", [("ordered = sorted(spans, key=lambda s: s[0])",
+                          "ordered = sorted(spans, key=lambda s: s[1])")]),
         # Replaced three operators that measured nothing (2026-09-10): `max(start, end)`
         # and `abs(end - start)` are no-ops when end >= start, which it always is here --
         # they were not bugs; and dropping the last span broke every case, so no smoke
         # test could survive. Viability is checked in probe_repair_world.py now.
-        ("merge-short", "out[-1][1] = max(out[-1][1], end)",
-         "out[-1][1] = max(out[-1][1], end) - 1"),
-        ("covered-fencepost", "return sum(end - start for start, end in merge(spans))",
-         "return sum(end - start + 1 for start, end in merge(spans))"),
-        ("sort-reverse", "ordered = sorted(spans, key=lambda s: s[0])",
-         "ordered = sorted(spans, key=lambda s: s[0], reverse=True)"),
+        ("merge-short", [("out[-1][1] = max(out[-1][1], end)",
+                          "out[-1][1] = max(out[-1][1], end) - 1")]),
+        ("covered-fencepost", [("return sum(end - start for start, end in merge(spans))",
+                                "return sum(end - start + 1 for start, end in merge(spans))")]),
+        ("sort-reverse", [("ordered = sorted(spans, key=lambda s: s[0])",
+                           "ordered = sorted(spans, key=lambda s: s[0], reverse=True)")]),
     ]
 
 
@@ -401,31 +413,41 @@ signatures.
 """
 
 
-def _ledger_mutations(p: dict) -> list[tuple[str, str, str]]:
-    muts = [
-        ("boundary", "if balance - amount < FLOOR:\n                rejected += 1\n"
-                     "                continue\n            balance -= amount",
-         "if balance - amount <= FLOOR:\n                rejected += 1\n"
-         "                continue\n            balance -= amount"),
-        ("no-skip", "                rejected += 1\n                continue\n"
-                    "            balance -= amount",
-         "                rejected += 1\n            balance -= amount"),
-        ("opening", "if balance - amount < FLOOR:", "if opening - amount < FLOOR:"),
-        ("floor-zero", "FLOOR = " + str(p["limit"]), "FLOOR = 0")
-        if p["limit"] != 0 else
-        ("pre-debit-check", "if balance - amount < FLOOR:", "if balance < FLOOR:"),
-        ("no-count", "                rejected += 1\n                continue",
-         "                continue"),
+def _ledger_mutations(p: dict) -> list[tuple[str, list]]:
+    BOUNDARY = ("if balance - amount < FLOOR:\n                rejected += 1\n"
+                "                continue\n            balance -= amount",
+                "if balance - amount <= FLOOR:\n                rejected += 1\n"
+                "                continue\n            balance -= amount")
+    NO_SKIP = ("                rejected += 1\n                continue\n"
+               "            balance -= amount",
+               "                rejected += 1\n            balance -= amount")
+    OPENING = ("if balance - amount < FLOOR:", "if opening - amount < FLOOR:")
+    NO_COUNT = ("                rejected += 1\n                continue",
+                "                continue")
+    muts: list[tuple[str, list]] = [
+        ("boundary", [BOUNDARY]),
+        ("no-skip", [NO_SKIP]),
+        ("opening", [OPENING]),
+        ("no-count", [NO_COUNT]),
+        ("pre-debit-check", [("if balance - amount < FLOOR:", "if balance < FLOOR:")]),
     ]
+    if p["limit"] != 0:
+        FLOOR_ZERO = ("FLOOR = " + str(p["limit"]), "FLOOR = 0")
+        muts.append(("floor-zero", [FLOOR_ZERO]))
+        # Multi-edit: the constant and the comparison are both wrong, and correcting
+        # either one alone still fails -- the fix has to reach two places.
+        muts.append(("floor+opening", [FLOOR_ZERO, OPENING]))
     if p["fee_bypasses"]:
-        muts.append(("fee-sign", 'elif kind == "fee":\n            balance -= amount',
-                     'elif kind == "fee":\n            balance += amount'))
+        FEE_SIGN = ('elif kind == "fee":\n            balance -= amount',
+                    'elif kind == "fee":\n            balance += amount')
+        muts.append(("fee-sign", [FEE_SIGN]))
+        muts.append(("fee-sign+no-count", [FEE_SIGN, NO_COUNT]))
     else:
-        muts.append(("fee-bypass",
-                     f'elif kind == "fee":\n            if balance - amount < {p["limit"]}:\n'
-                     "                rejected += 1\n                continue\n"
-                     "            balance -= amount",
-                     'elif kind == "fee":\n            balance -= amount'))
+        muts.append(("fee-bypass", [
+            (f'elif kind == "fee":\n            if balance - amount < {p["limit"]}:\n'
+             "                rejected += 1\n                continue\n"
+             "            balance -= amount",
+             'elif kind == "fee":\n            balance -= amount')]))
     return muts
 
 
@@ -546,25 +568,32 @@ signatures.
 """
 
 
-def _pathgrid_mutations(p: dict) -> list[tuple[str, str, str]]:
+def _pathgrid_mutations(p: dict) -> list[tuple[str, list]]:
     deltas = _D4 if p["conn"] == 4 else _D8
-    dropped = deltas[:-1]
-    muts = [
-        ("walls-open", "        return grid[r][c] != WALL", "        return True"),
-        ("drop-direction", f"DELTAS = {deltas!r}", f"DELTAS = {dropped!r}"),
-        ("unreachable-zero", "queue.append((nxt, dist + 1))\n    return -1",
-         "queue.append((nxt, dist + 1))\n    return 0"),
-        ("no-start-check", "if not open_cell(start) or not open_cell(goal):",
-         "if not open_cell(goal):"),
-        ("off-grid", "        if not (0 <= r < rows and 0 <= c < cols):",
-         "        if not (0 <= r <= rows and 0 <= c <= cols):"),
-        ("dist-flat", "queue.append((nxt, dist + 1))", "queue.append((nxt, dist))"),
+    WALLS_OPEN = ("        return grid[r][c] != WALL", "        return True")
+    DROP_DIR = (f"DELTAS = {deltas!r}", f"DELTAS = {deltas[:-1]!r}")
+    UNREACHABLE = ("queue.append((nxt, dist + 1))\n    return -1",
+                   "queue.append((nxt, dist + 1))\n    return 0")
+    NO_START = ("if not open_cell(start) or not open_cell(goal):",
+                "if not open_cell(goal):")
+    muts: list[tuple[str, list]] = [
+        ("walls-open", [WALLS_OPEN]),
+        ("drop-direction", [DROP_DIR]),
+        ("unreachable-zero", [UNREACHABLE]),
+        ("no-start-check", [NO_START]),
+        ("off-grid", [("        if not (0 <= r < rows and 0 <= c < cols):",
+                       "        if not (0 <= r <= rows and 0 <= c <= cols):")]),
+        ("dist-flat", [("queue.append((nxt, dist + 1))", "queue.append((nxt, dist))")]),
+        # Multi-edit: reachability and the distance it reports are both wrong, and each
+        # correction alone still fails.
+        ("drop-dir+unreachable", [DROP_DIR, UNREACHABLE]),
+        ("walls+no-start", [WALLS_OPEN, NO_START]),
     ]
     if p["conn"] == 4:
-        muts.append(("extra-diagonal", f"DELTAS = {deltas!r}",
-                     f"DELTAS = {deltas + ((1, 1), (-1, -1))!r}"))
+        muts.append(("extra-diagonal", [(f"DELTAS = {deltas!r}",
+                                         f"DELTAS = {deltas + ((1, 1), (-1, -1))!r}")]))
     else:
-        muts.append(("lost-diagonals", f"DELTAS = {deltas!r}", f"DELTAS = {_D4!r}"))
+        muts.append(("lost-diagonals", [(f"DELTAS = {deltas!r}", f"DELTAS = {_D4!r}")]))
     return muts
 
 
@@ -719,14 +748,27 @@ def generate(seed: int, template: str | None = None) -> RepairWorld:
                 f"{tpl.name} seed={seed}: reference disagrees with the oracle on "
                 f"{_render_case(fn, args)}: reference {got!r}, oracle {want[i]!r}")
 
-    order = list(range(len(tpl.mutations(params))))
+    all_muts = tpl.mutations(params)
+    order = list(range(len(all_muts)))
     rng.shuffle(order)
+    # Single-edit operators outnumber multi-edit ones, so an unbiased draw yields ~18%
+    # multi-edit and barely moves difficulty. MULTI_EDIT_RATE is the fraction of seeds
+    # that prefer a multi-edit defect; the rest are single-edit, so the pool spans both.
+    if rng.random() < MULTI_EDIT_RATE:
+        order.sort(key=lambda i: len(all_muts[i][1]) < 2)
+    def _apply(edits: list) -> str:
+        out = reference
+        for find, replace in edits:
+            if find not in out:
+                raise AssertionError(
+                    f"{tpl.name}: mutation edit no longer matches its rendered source: "
+                    f"{find[:60]!r}")
+            out = out.replace(find, replace, 1)
+        return out
+
     for op_index in order:
-        label, find, replace = tpl.mutations(params)[op_index]
-        if find not in reference:
-            raise AssertionError(
-                f"{tpl.name} mutation {label} no longer matches its rendered source")
-        buggy = reference.replace(find, replace, 1)
+        label, edits = tpl.mutations(params)[op_index]
+        buggy = _apply(edits)
         try:
             bug_ns = _load(buggy, tpl.name)
         except Exception:                                        # noqa: BLE001
@@ -763,6 +805,22 @@ def generate(seed: int, template: str | None = None) -> RepairWorld:
         if len(vis) < MIN_VISIBLE or len([i for i in differ if i in hid]) < MIN_DISCRIMINATING:
             continue
 
+        # A multi-edit defect has to actually require every edit. Revert one at a time:
+        # if the module passes the hidden suite with any single edit undone, the other
+        # edits were decoration and the instance is a single-edit task wearing a longer
+        # label. Reject the operator rather than mislabel the difficulty.
+        if len(edits) > 1:
+            def _still_fails(subset: list) -> bool:
+                try:
+                    pns = _load(_apply(subset), tpl.name)
+                except Exception:                                # noqa: BLE001
+                    return True
+                return any(_call(pns, *(edges + drawn)[i]) != want[i] for i in hid)
+
+            if not all(_still_fails([e for j, e in enumerate(edits) if j != skip])
+                       for skip in range(len(edits))):
+                continue
+
         def _c(i: int) -> tuple[str, tuple]:
             return (edges + drawn)[i]
 
@@ -785,6 +843,7 @@ def generate(seed: int, template: str | None = None) -> RepairWorld:
             hidden_tests=hidden_src,
             hidden_cases=len(hid),
             difficulty={"template": tpl.name, "mutation": label, "params": params,
+                        "edits": len(edits),
                         "hidden_cases": len(hid), "visible_cases": len(vis),
                         "discriminating": len([i for i in differ if i in hid])},
         )

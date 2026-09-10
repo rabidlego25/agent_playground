@@ -26,6 +26,9 @@ Since the 2026-09-10 parameterisation it also asserts two properties of the *poo
 6. the pool is wide enough that a run of n instances is close to n independent draws. The
    number reported is the distinct-cell count at n=40, which is what "effective n" means
    here and what the 12-cell pool could not deliver.
+7. a multi-edit defect really needs every edit -- reverting any single one still fails the
+   hidden suite. Without this a "2-edit" instance can be a 1-edit task wearing a longer
+   label, which would overstate the difficulty the pool actually delivers.
 """
 import random
 import subprocess
@@ -98,12 +101,18 @@ if __name__ == "__main__":
             edges, drawn = tpl.edges(p), tpl.cases(rng, p)
             want = [("ok", tpl.oracle(p, fn, a)) for fn, a in edges + drawn]
             ne = len(edges)
-            for label, find, repl in tpl.mutations(p):
+            for label, edits in tpl.mutations(p):
                 offered.add(label)
-                if find not in ref:
+                mutated, ok = ref, True
+                for find, repl in edits:
+                    if find not in mutated:
+                        ok = False
+                        break
+                    mutated = mutated.replace(find, repl, 1)
+                if not ok:
                     continue
                 try:
-                    bns = _load(ref.replace(find, repl, 1), tpl.name)
+                    bns = _load(mutated, tpl.name)
                 except Exception:                                  # noqa: BLE001
                     continue
                 got = [_call(bns, fn, a) for fn, a in edges + drawn]
@@ -115,6 +124,30 @@ if __name__ == "__main__":
         for label in sorted(offered - reachable):
             dead.append(f"{tpl.name}/{label}: never satisfies the visible/hidden constraint")
 
+    # --- property 7: every edit of a multi-edit defect is load-bearing ----------------
+    partials = wrongly_passed = 0
+    tpl_by_name = {t.name: t for t in REPAIR_TEMPLATES}
+    for seed in range(N):
+        w = generate(seed)
+        if w.difficulty.get("edits", 1) < 2:
+            continue
+        edits_l = dict(tpl_by_name[w.module_name].mutations(w.difficulty["params"]))[
+            w.difficulty["mutation"]]
+        for skip in range(len(edits_l)):
+            partial = w.reference_source
+            for j, (find, repl) in enumerate(edits_l):
+                if j != skip:
+                    partial = partial.replace(find, repl, 1)
+            with tempfile.TemporaryDirectory() as tmp:
+                root = w.materialize(Path(tmp) / "ws")
+                (root / f"{w.module_name}.py").write_text(partial)
+                if w.check(root).passed:
+                    wrongly_passed += 1
+                    failures.append(
+                        f"{w.task_id}: passes with edit {skip} of "
+                        f"{w.difficulty['mutation']} reverted -- not really multi-edit")
+            partials += 1
+
     # --- property 6: the pool is wide enough that n draws are ~n independent ----------
     cells_40 = {cell_id(generate(s)) for s in range(40)}
     cells_all = {cell_id(generate(s)) for s in range(N)}
@@ -125,6 +158,9 @@ if __name__ == "__main__":
     print(f"  hidden cases per instance: min {min(cases)}, max {max(cases)}")
     print(f"\n  distinct (template, spec, operator) cells: {len(cells_all)}/{N} seeds")
     print(f"  effective n at the 007 run size:            {len(cells_40)}/40")
+    multi = sum(1 for seed in range(N) if generate(seed).difficulty.get("edits", 1) > 1)
+    print(f"  multi-edit defects:                         {multi}/{N}")
+    print(f"  partial fixes that wrongly passed:          {wrongly_passed}/{partials}")
     if dead:
         failures.extend(dead)
 
@@ -133,4 +169,4 @@ if __name__ == "__main__":
         for f in failures[:20]:
             print(f"  {f}")
         sys.exit(1)
-    print("\n  all six properties hold: four on every instance, two on the pool.")
+    print("\n  all seven properties hold: four per instance, three on the pool.")
