@@ -9,8 +9,8 @@
         "timeoutSeconds": 180,
         "models": [
           {
-            "id": "gemini-2.5-flash",
-            "name": "gemini-2.5-flash",
+            "id": "gemini-3.5-flash-lite",
+            "name": "gemini-3.5-flash-lite",
             "contextWindow": 1048576,
             "maxTokens": 8192
           }
