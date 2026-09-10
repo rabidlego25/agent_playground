@@ -1,6 +1,9 @@
-"""Shortest path on a 4-connected grid of open cells and walls."""
+"""Shortest path on a grid of open cells and walls."""
 
 from collections import deque
+
+WALL = "X"
+DELTAS = ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1))
 
 
 def steps(grid, start, goal):
@@ -10,7 +13,7 @@ def steps(grid, start, goal):
         r, c = rc
         if not (0 <= r < rows and 0 <= c < cols):
             return False
-        return grid[r][c] != "#"
+        return grid[r][c] != WALL
 
     if not open_cell(start) or not open_cell(goal):
         return -1
@@ -20,7 +23,8 @@ def steps(grid, start, goal):
         (r, c), dist = queue.popleft()
         if (r, c) == goal:
             return dist
-        for nxt in ((r + 1, c), (r - 1, c), (r, c + 1), (r, c - 1)):
+        for dr, dc in DELTAS:
+            nxt = (r + dr, c + dc)
             if nxt not in seen and open_cell(nxt):
                 seen.add(nxt)
                 queue.append((nxt, dist + 1))

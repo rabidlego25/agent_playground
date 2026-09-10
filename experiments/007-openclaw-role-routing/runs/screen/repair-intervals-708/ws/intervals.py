@@ -4,10 +4,10 @@
 def merge(spans):
     if not spans:
         return []
-    ordered = list(spans)
+    ordered = sorted(spans, key=lambda s: s[0])
     out = [list(ordered[0])]
     for start, end in ordered[1:]:
-        if start <= out[-1][1]:
+        if start < out[-1][1]:
             out[-1][1] = max(out[-1][1], end)
         else:
             out.append([start, end])

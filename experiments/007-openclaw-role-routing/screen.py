@@ -39,6 +39,7 @@ sys.path.insert(0, str(ROOT))
 
 from lib.trace import TraceWriter                                  # noqa: E402
 from lib.worlds import generate                                    # noqa: E402
+from lib.worlds.repair import cell_id                              # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).parent))
 import export as oc_export                                         # noqa: E402
@@ -61,9 +62,13 @@ DEFAULT_BUDGET = 400
 # turn, so a 10-12 call instance costs ~60,600 input tokens (~5,500/call) and three
 # instances inside one minute breach the cap. Pacing on request count does not bound
 # this -- that is why the first run lost 3 of 10 instances to 429 aborts.
+# Budget on the tokens the *quota* counts, not the billed `input` field. cacheRead is
+# ~16,200 of the ~21,000 per call (system prompt + tool schemas) and the quota counts it,
+# so one 10-call instance is ~220,000 -- 87% of a minute on its own. Pacing on `input`
+# under-counted by 3-4x and cost 7 of 10 instances on the second run.
 TPM_CAP = 250_000
-TPM_TARGET = 175_000          # 70% of cap: headroom for a long instance mid-window
-EXPECTED_IN_PER_INSTANCE = 65_000   # measured mean 60,643, rounded up
+TPM_TARGET = 235_000
+EXPECTED_PER_INSTANCE = 230_000     # measured 217,628-241,307 over three completed runs
 RETRIES = 2                   # a 429 aborts before editing, so a retry starts clean
 
 
@@ -116,7 +121,7 @@ def run_one(m: dict, model: str, template: str, timeout: int,
     return p.returncode, p.stdout, p.stderr
 
 
-def _pace(window: deque, expected: int = EXPECTED_IN_PER_INSTANCE) -> float:
+def _pace(window: deque, expected: int = EXPECTED_PER_INSTANCE) -> float:
     """Block until `expected` more input tokens fit inside the trailing-60s budget.
 
     Token-aware, because the cap is token-denominated. Returns seconds waited."""
@@ -140,7 +145,7 @@ def run(model: str, template: str, budget: int, timeout: int, lean: bool = False
     rows = []
     window: deque = deque()
     print(f"screen: n={len(manifest)}  model={model}  budget={budget} requests")
-    print(f"        pacing to {TPM_TARGET:,} input tok/min against a {TPM_CAP:,} cap\n")
+    print(f"        pacing to {TPM_TARGET:,} quota tok/min against a {TPM_CAP:,} cap\n")
 
     for i, m in enumerate(manifest, 1):
         if spent >= budget:
@@ -161,7 +166,7 @@ def run(model: str, template: str, budget: int, timeout: int, lean: bool = False
                 rc, out, err = -1, "", "harness timeout"
             wall = time.time() - t0
 
-            toks = oc_export.input_tokens(state)
+            toks = oc_export.quota_tokens(state)
             window.append((time.time(), toks))
             spent += oc_export.count_model_calls(state)
             # Authoritative, unlike a stderr grep: the first run's stderr heuristic
@@ -169,7 +174,13 @@ def run(model: str, template: str, budget: int, timeout: int, lean: bool = False
             limited = oc_export.rate_limit_error(state)
             if not limited or attempt == RETRIES:
                 break
-            print(f"        {m['task_id']}: {limited} -- retry {attempt + 1}/{RETRIES}")
+            # Honour the delay Google supplied. Retrying immediately spends another
+            # request on another 429; the pacer's own window cannot see the quota a
+            # *rejected* attempt consumed, so its headroom estimate is not trustworthy here.
+            delay = oc_export.rate_limit_delay(state) + 5
+            print(f"        {m['task_id']}: {limited} -- waiting {delay:.0f}s, "
+                  f"retry {attempt + 1}/{RETRIES}")
+            time.sleep(delay)
             # A 429 aborts before the agent edits anything, so the workspace is still a
             # clean starting state; rebuild it anyway rather than assume that.
             shutil.rmtree(ws); shutil.rmtree(state, ignore_errors=True)
@@ -188,13 +199,14 @@ def run(model: str, template: str, budget: int, timeout: int, lean: bool = False
         ep.config["rate_limited"] = limited
         writer.write(ep)
 
-        rows.append({"task_id": m["task_id"], "passed": bool(v.passed),
+        rows.append({"task_id": m["task_id"], "seed": m["seed"],
+                     "passed": bool(v.passed),
                      "edited": bool(v.edited), "calls": ep.config["api_requests"],
-                     "in_tokens": toks, "rc": rc, "wall_s": round(wall, 1),
+                     "quota_tokens": toks, "rc": rc, "wall_s": round(wall, 1),
                      "rate_limited": limited})
         flag = "PASS" if v.passed else ("edited, still failing" if v.edited else "untouched")
         print(f"  {i:2d}/{len(manifest)}  {m['task_id']:26s} {flag:22s} "
-              f"{ep.config['api_requests']:3d} calls {toks:7,d} tok {wall:5.0f}s "
+              f"{ep.config['api_requests']:3d} calls {toks:7,d} qtok {wall:5.0f}s "
               f"[{spent}/{budget}]" + ("  RATE-LIMITED" if limited else ""))
 
     (RUNS / "screen.json").write_text(json.dumps(rows, indent=2))
@@ -234,8 +246,9 @@ def _verdict(rows: list[dict], spent: int = 0) -> None:
         print("  -> CEILING (>0.85). Harden the 12-defect pool before running three arms.")
     else:
         print("  -> FUNDABLE (0.25-0.85). Pick k and n from the RPD budget.")
-    print(f"  n={len(clean)} clean on a 12-defect pool. Says nothing about repair tasks "
-          "in general.")
+    cells = len({cell_id(generate(r["seed"])) for r in clean if "seed" in r}) or len(clean)
+    print(f"  n={len(clean)} clean, {cells} distinct pool cells. Says nothing about repair "
+          "tasks in general.")
 
 
 def _wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:

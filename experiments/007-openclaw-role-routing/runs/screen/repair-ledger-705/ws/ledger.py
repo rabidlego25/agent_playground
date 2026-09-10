@@ -1,5 +1,7 @@
 """Apply transactions to an opening balance, in whole cents."""
 
+FLOOR = 0
+
 
 def apply(opening, txns):
     balance = opening
@@ -8,11 +10,14 @@ def apply(opening, txns):
         if kind == "credit":
             balance += amount
         elif kind == "debit":
-            if balance - amount < 0:
+            if balance - amount < FLOOR:
                 rejected += 1
                 continue
             balance -= amount
         elif kind == "fee":
+            if balance - amount < FLOOR:
+                rejected += 1
+                continue
             balance -= amount
         else:
             raise ValueError(kind)

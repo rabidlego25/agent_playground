@@ -1,5 +1,10 @@
 # 007 capability screen — observed facts
 
+> **Three runs, 2026-09-10.** Run 1 (12-cell pool) 7/7 clean = 1.00. Run 2 (parameterised
+> pool, broken pacer) 3/3 clean, 7 of 10 lost to 429s. Run 3 (parameterised pool, corrected
+> pacer) **9/10 = 0.90, 0 rate-limited**. Sections below are written against run 1 unless
+> marked; the run 3 additions are at the end.
+
 **Date:** 2026-09-10. **OpenClaw 2026.9.3**, image `openclaw-007`. Backend: Google AI Studio
 free tier, `gemini-3.5-flash-lite` via the OpenAI-compatibility endpoint. Arm A only, n=10,
 82 requests spent.
@@ -104,3 +109,75 @@ Unchanged from PILOT.md, and neither is reachable without running arm B:
 82 requests and ~430K input tokens, inside the free tier. No money spent; the project is
 unbilled. No result about agent configurations claimed, and none implied — this is arm A on
 ten instances of a twelve-defect pool.
+
+
+---
+
+# Run 3 — corrected pacing, parameterised pool (2026-09-10)
+
+```
+raw / clean   9/10 = 0.90   Wilson95 [0.60, 0.98]
+rate-limited  0/10          108 requests
+worked the task and got it wrong: 0
+-> CEILING (>0.85)
+```
+
+## The pacer was budgeting on the wrong number
+
+Run 2 lost 7 of 10 instances to 429s *with pacing enabled*, which is worse than run 1 with
+no pacing at all. Two causes, both mine:
+
+- **`cacheRead` is ~16,200 of the ~21,000 tokens per call** — the system prompt and tool
+  schemas — and Google's input-token quota counts the cached prefix. `totalTokens = input +
+  output + cacheRead`. The pacer budgeted on `input` alone, which reports ~5,000, so it
+  under-counted by 3–4× and believed it had headroom while sitting on the cap. **One
+  10-call instance is 217K–246K against a 250,000/min cap: 87–98% of a minute's quota on
+  its own.**
+- **Retries ignored `retryDelay`.** Each 429 carried 30–59s; the retry fired immediately
+  and bought another 429, two wasted requests per instance.
+
+Corrected: pace on `quota_tokens()`, honour the supplied delay. Run 3 paced ~61s between
+instances and lost nothing.
+
+This also corrects the arithmetic that justified this backend. A call is ~21,000 tokens,
+not the ~5,500 the `input` field suggested. **Arm B at 30–60 calls is 630K–1,260K per
+instance — 2.5–5 minutes of quota for one instance of one arm.**
+
+`--local-model-lean` cuts a call to 8,708 tokens (`cacheRead` → 0), a 2.4× reduction, and
+an instance still passed 11/11 under it. It is a real lever and an open decision: arm B is
+pre-registered as "installed as shipped", so imposing a reduced tool surface on it changes
+the treatment even though applying it uniformly keeps the arms matched.
+
+## Parameterisation moved the pool, and it was not enough
+
+1.00 → 0.90. The single failure is not a wrong fix: the agent wrote a `test_intervals.py`
+and never edited `intervals.py`, spending its turns on tests. A real agent failure mode,
+and one worth measuring across configurations — but still **zero instances where an agent
+edited the module and got it wrong.**
+
+## The real blocker is n, not difficulty
+
+Power at 0.05, paired McNemar, effects the size 004/006 measured (+0.15 ensembling,
+−0.20 deliberation), rho=0.3 for shared instance difficulty:
+
+| n | C>A (.80 vs .65) | A>B (.65 vs .45) |
+|---|---|---|
+| 40 | 0.14 | 0.22 |
+| 80 | 0.33 | 0.46 |
+| 160 | 0.65 | 0.81 |
+| 240 | 0.84 | 0.95 |
+
+**n=40 has 14–22% power.** It was chosen as "what the budget allows" and never checked
+against an effect size. Worse, at A=0.90 the C>A leg is unreachable at *any* n that fits
+the budget: even a perfect arm C gives p=0.125 at n=40, because only 0.10 of headroom
+exists above arm A.
+
+So two things must both change before the main run, and they trade against each other:
+
+- **difficulty** — arm A wants to land near 0.60–0.70, to leave headroom on both sides;
+- **n** — 160+ for either leg to be worth reporting, against ~11 calls/instance, 500 RPD,
+  and three arms.
+
+n=160 × 3 arms × ~11 calls ≈ 5,300 requests ≈ 11 days of free-tier quota. That is the
+honest cost of a result 007 could publish, and it is a different design from the one
+pre-registered.

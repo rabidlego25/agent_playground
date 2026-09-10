@@ -152,17 +152,44 @@ def rate_limit_error(state_dir: str | Path) -> str | None:
 
 
 def input_tokens(state_dir: str | Path) -> int:
-    """Input tokens consumed under this state dir. The binding free-tier quota is
-    GenerateContentInputTokensPerModelPerMinute at 250,000, so pacing has to be token
-    aware; counting requests does not bound it."""
+    """Billed input tokens: the `input` field alone, excluding the cached prefix."""
+    return _sum_usage(state_dir, lambda u: int(u.get("input") or 0))
+
+
+def quota_tokens(state_dir: str | Path) -> int:
+    """Tokens as the *quota* counts them, which is what pacing must budget on.
+
+    Measured 2026-09-10: `totalTokens` = input + output + cacheRead, and cacheRead is
+    ~16,200 per call -- the system prompt and tool schemas, cached. Google's
+    GenerateContentInputTokensPerModelPerMinute quota counts the cached prefix, so real
+    consumption is ~21,000 per call against a 250,000/min cap, not the ~5,000 the `input`
+    field reports. One 10-call instance is 87% of a minute's quota on its own.
+
+    Pacing on `input` under-counts by 3-4x, which is why the second screen run lost 7 of
+    10 instances to 429s that the pacer believed it had headroom for."""
+    return _sum_usage(state_dir, lambda u: int(u.get("totalTokens") or 0))
+
+
+def _sum_usage(state_dir: str | Path, pick) -> int:
     n = 0
     for db in session_dbs(state_dir):
         try:
-            n += sum(int((m.get("usage") or {}).get("input") or 0)
+            n += sum(pick(m.get("usage") or {})
                      for _, m in _messages(db) if m.get("role") == "assistant")
         except LookupError:
             continue
     return n
+
+
+def rate_limit_delay(state_dir: str | Path, default: float = 30.0) -> float:
+    """Seconds Google asked us to wait, from the 429 body. Retrying without honouring it
+    just spends another request on another 429 -- which is what the second screen run did,
+    twice per instance, for seven instances."""
+    msg = rate_limit_error(state_dir)
+    if not msg:
+        return 0.0
+    m = re.search(r"retryDelay ([0-9.]+)s", msg)
+    return float(m.group(1)) if m else default
 
 
 def describe(state_dir: str | Path) -> dict[str, Any]:
