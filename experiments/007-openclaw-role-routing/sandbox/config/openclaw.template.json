@@ -1,0 +1,21 @@
+{
+  "models": {
+    "providers": {
+      "groq": {
+        "baseUrl": "https://api.groq.com/openai/v1",
+        "api": "openai-completions",
+        "auth": "api-key",
+        "apiKey": "__GROQ_API_KEY__",
+        "timeoutSeconds": 180,
+        "models": [
+          {
+            "id": "openai/gpt-oss-120b",
+            "name": "gpt-oss-120b",
+            "contextWindow": 131072,
+            "maxTokens": 8192
+          }
+        ]
+      }
+    }
+  }
+}
