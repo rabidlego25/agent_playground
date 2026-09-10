@@ -1,12 +1,23 @@
 # 007 — Does role-specialised inter-agent routing beat one well-prompted agent?
 
-**Status:** pre-registered; harness verified; **blocked on a viable backend.** **Created:**
-2026-09-10. **Prediction committed in this file before any run**, and no run has been taken
+**Status:** pre-registered; harness verified; backend chosen and screened; **blocked on the
+task pool, not the backend.** **Created:** 2026-09-10. **Prediction committed in this file before any run**, and no run has been taken
 against it. The pilot of 2026-09-10 (`PILOT.md`) wired OpenClaw 2026.9.3 end to end and then
 found that the Groq free tier's 8,000 TPM cap makes the comparison unattributable: arm B would
 hit rate limits far more often than arm A, so its predicted loss could not be read as
 deliberation. The task world, oracle, sandbox and trace export all work and are unchanged by
 this.
+
+**Update, 2026-09-10 (`SCREEN.md`).** Backend resolved: Google AI Studio free tier,
+`gemini-3.5-flash-lite`, the only free text model with a usable daily budget (500 RPD; every
+Flash tier is 20 RPD after Google's December 2025 cut). The arm A screen came back at **7/7
+= 1.00 on instances that ran to completion, with zero instances where the agent worked the
+task and got it wrong.** That is the pre-registered *ceiling* condition, not the floor that
+was feared. **The 12-defect pool cannot separate three arms and must be parameterised
+before the main run** — the weakness this README already flagged under *Task family and
+oracle* is now the binding one. The binding quota is input tokens per minute (250,000), not
+requests, and arm B at 30-60 turns needs 165K-330K input tokens per instance, so it must be
+paced across several minutes.
 
 ## Question
 

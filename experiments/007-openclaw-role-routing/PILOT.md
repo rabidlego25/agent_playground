@@ -1,6 +1,10 @@
 # 007 pilot — observed facts
 
-**Date:** 2026-09-10. **OpenClaw 2026.9.3 (1391f7c)**, image `openclaw-007` (node:24-bookworm-slim,
+**Date:** 2026-09-10. **Superseded in part by `SCREEN.md`** (same day), which ran the
+Google AI Studio backend and corrected this file's account of the trace schema — the
+correction is inlined below. The Groq findings here still stand.
+
+**OpenClaw 2026.9.3 (1391f7c)**, image `openclaw-007` (node:24-bookworm-slim,
 `npm i -g openclaw`, 1.61 GB). Backend: Groq free tier, `openai/gpt-oss-120b`.
 
 Not a finding about agents. This is the harness check the README requires, and its headline is
@@ -35,7 +39,18 @@ Two tables matter:
 - `trajectory_runtime_events(session_id, seq, run_id, event_json)` — a declared trace schema
   (`traceSchema: "openclaw-trajectory", schemaVersion: 1`) with `session.started`,
   `context.compiled`, `prompt.submitted`, `model.completed`, `trace.artifacts`,
-  `session.ended`. **`model.completed` carries usage**, so tokens per call come from here.
+  `session.ended`. ~~**`model.completed` carries usage**, so tokens per call come from
+  here.~~
+
+  > **Wrong on both counts — corrected 2026-09-10 against a real session, see `SCREEN.md`.**
+  > `model.completed` fires **once per run**, not once per model call: a two-call run emits
+  > one, so counting it undercounts requests. And its usage fields read 0 unless the model
+  > row sets `compat.supportsUsageInStreaming: true` — OpenClaw auto-detects that from the
+  > base URL and guesses wrong for `generativelanguage.googleapis.com`. The per-request unit
+  > is an **assistant message in `transcript_events`**, which carries
+  > `usage{input,output,cacheRead,cacheWrite}`, `model`, `stopReason`, and
+  > `content[].toolCall`. Both errors produce plausible output while being wrong, which is
+  > the failure mode `CLAUDE.md` names.
 
 That is the exporter's target, and it is richer than the JSONL fallback the docs mention. It
 populates even on failed runs (25 events from a run that never edited a file), which is what

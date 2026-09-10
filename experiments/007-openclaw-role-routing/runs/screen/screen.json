@@ -1,0 +1,92 @@
+[
+  {
+    "task_id": "repair-intervals-700",
+    "passed": true,
+    "edited": true,
+    "calls": 12,
+    "rc": 0,
+    "wall_s": 51.0,
+    "rate_limited": false
+  },
+  {
+    "task_id": "repair-pathgrid-701",
+    "passed": false,
+    "edited": false,
+    "calls": 1,
+    "rc": 1,
+    "wall_s": 3.7,
+    "rate_limited": true
+  },
+  {
+    "task_id": "repair-intervals-702",
+    "passed": true,
+    "edited": true,
+    "calls": 10,
+    "rc": 0,
+    "wall_s": 59.3,
+    "rate_limited": false
+  },
+  {
+    "task_id": "repair-intervals-703",
+    "passed": true,
+    "edited": true,
+    "calls": 10,
+    "rc": 0,
+    "wall_s": 73.4,
+    "rate_limited": false
+  },
+  {
+    "task_id": "repair-pathgrid-704",
+    "passed": true,
+    "edited": true,
+    "calls": 12,
+    "rc": 0,
+    "wall_s": 67.8,
+    "rate_limited": false
+  },
+  {
+    "task_id": "repair-ledger-705",
+    "passed": true,
+    "edited": true,
+    "calls": 11,
+    "rc": 0,
+    "wall_s": 47.3,
+    "rate_limited": false
+  },
+  {
+    "task_id": "repair-pathgrid-706",
+    "passed": false,
+    "edited": false,
+    "calls": 3,
+    "rc": 1,
+    "wall_s": 7.9,
+    "rate_limited": true
+  },
+  {
+    "task_id": "repair-intervals-707",
+    "passed": true,
+    "edited": true,
+    "calls": 12,
+    "rc": 1,
+    "wall_s": 35.9,
+    "rate_limited": true
+  },
+  {
+    "task_id": "repair-intervals-708",
+    "passed": false,
+    "edited": false,
+    "calls": 1,
+    "rc": 1,
+    "wall_s": 3.9,
+    "rate_limited": true
+  },
+  {
+    "task_id": "repair-pathgrid-709",
+    "passed": true,
+    "edited": true,
+    "calls": 10,
+    "rc": 0,
+    "wall_s": 15.7,
+    "rate_limited": false
+  }
+]

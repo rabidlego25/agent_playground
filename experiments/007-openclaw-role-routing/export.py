@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sqlite3
 import sys
 from collections import Counter
@@ -119,6 +120,46 @@ def count_model_calls(state_dir: str | Path) -> int:
     for db in session_dbs(state_dir):
         try:
             n += sum(1 for _, m in _messages(db) if m.get("role") == "assistant")
+        except LookupError:
+            continue
+    return n
+
+
+def rate_limit_error(state_dir: str | Path) -> str | None:
+    """The 429 message from this run, if it hit one, else None.
+
+    Read from the trace rather than stderr: OpenClaw records the provider error on
+    `model.completed` with stopReason "error", and a run killed this way aborts rather
+    than backing off, leaving the workspace untouched. That makes a rate-limited run
+    cleanly retryable -- and makes it a harness event, not a capability failure. Counting
+    the two together is what made the first screen's headline number meaningless."""
+    for db in session_dbs(state_dir):
+        try:
+            for e in _events(db, "trajectory_runtime_events"):
+                # Scan the whole serialized event: errorMessage is nested inside the
+                # message snapshot, not at the top of `data`. Reading only the top level
+                # silently reports "no rate limit" on a run that died of one.
+                blob = json.dumps(e["event"], default=str)
+                if '"429' not in blob and "RESOURCE_EXHAUSTED" not in blob:
+                    continue
+                q = re.search(r'quotaId\\?"?:\s*\\?"([^"\\]+)', blob)
+                delay = re.search(r'retryDelay\\?"?:\s*\\?"([^"\\]+)', blob)
+                return (f"{q.group(1) if q else '429'} "
+                        f"(retryDelay {delay.group(1) if delay else '?'})")
+        except LookupError:
+            continue
+    return None
+
+
+def input_tokens(state_dir: str | Path) -> int:
+    """Input tokens consumed under this state dir. The binding free-tier quota is
+    GenerateContentInputTokensPerModelPerMinute at 250,000, so pacing has to be token
+    aware; counting requests does not bound it."""
+    n = 0
+    for db in session_dbs(state_dir):
+        try:
+            n += sum(int((m.get("usage") or {}).get("input") or 0)
+                     for _, m in _messages(db) if m.get("role") == "assistant")
         except LookupError:
             continue
     return n

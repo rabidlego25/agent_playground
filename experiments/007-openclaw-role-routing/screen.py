@@ -31,6 +31,7 @@ import shutil
 import subprocess
 import sys
 import time
+from collections import deque
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -53,10 +54,17 @@ ENV_FILE = Path.home() / "Documents/scratch/keys/openclaw.env"
 # 500 RPD on Gemini 3.5 Flash Lite. 400 leaves room to re-run a failed instance and to
 # inspect a session without the screen having eaten the whole day.
 DEFAULT_BUDGET = 400
-# 15 RPM. Turn-level pacing cannot govern the calls *inside* one agent turn, so this is a
-# floor on the gap between turns, not a guarantee -- 429s inside a turn are recorded
-# rather than prevented, and their rate is one of the things the screen is measuring.
-MIN_TURN_GAP_S = 8.0
+
+# The binding quota is *input tokens per minute*, not requests. Measured on the first
+# screen run (2026-09-10): quotaId GenerateContentInputTokensPerModelPerMinute-FreeTier,
+# value 250,000, retryDelay ~50s. An agent loop resends the whole conversation every
+# turn, so a 10-12 call instance costs ~60,600 input tokens (~5,500/call) and three
+# instances inside one minute breach the cap. Pacing on request count does not bound
+# this -- that is why the first run lost 3 of 10 instances to 429 aborts.
+TPM_CAP = 250_000
+TPM_TARGET = 175_000          # 70% of cap: headroom for a long instance mid-window
+EXPECTED_IN_PER_INSTANCE = 65_000   # measured mean 60,643, rounded up
+RETRIES = 2                   # a 429 aborts before editing, so a retry starts clean
 
 
 def prepare() -> list[dict]:
@@ -108,34 +116,68 @@ def run_one(m: dict, model: str, template: str, timeout: int,
     return p.returncode, p.stdout, p.stderr
 
 
+def _pace(window: deque, expected: int = EXPECTED_IN_PER_INSTANCE) -> float:
+    """Block until `expected` more input tokens fit inside the trailing-60s budget.
+
+    Token-aware, because the cap is token-denominated. Returns seconds waited."""
+    waited = 0.0
+    while True:
+        now = time.time()
+        while window and now - window[0][0] > 60:
+            window.popleft()
+        used = sum(t for _, t in window)
+        if used + expected <= TPM_TARGET or not window:
+            return waited
+        sleep_for = max(1.0, 61 - (now - window[0][0]))
+        time.sleep(sleep_for)
+        waited += sleep_for
+
+
 def run(model: str, template: str, budget: int, timeout: int, lean: bool = False) -> None:
     manifest = prepare()
     writer = TraceWriter("007_screen")
     spent = 0
     rows = []
-    print(f"screen: n={len(manifest)}  model={model}  budget={budget} requests\n")
+    window: deque = deque()
+    print(f"screen: n={len(manifest)}  model={model}  budget={budget} requests")
+    print(f"        pacing to {TPM_TARGET:,} input tok/min against a {TPM_CAP:,} cap\n")
 
     for i, m in enumerate(manifest, 1):
         if spent >= budget:
             print(f"\nbudget spent ({spent}/{budget}) after {i - 1} instances -- stopping.")
             break
-        if i > 1:
-            time.sleep(MIN_TURN_GAP_S)
 
-        t0 = time.time()
-        try:
-            rc, out, err = run_one(m, model, template, timeout, lean)
-        except subprocess.TimeoutExpired:
-            rc, out, err = -1, "", "harness timeout"
-        wall = time.time() - t0
+        ws = Path(m["workspace"])
+        state = ws.parent / "state"
+        for attempt in range(RETRIES + 1):
+            if attempt or i > 1:
+                waited = _pace(window)
+                if waited:
+                    print(f"        paced {waited:.0f}s to stay under the token cap")
+            t0 = time.time()
+            try:
+                rc, out, err = run_one(m, model, template, timeout, lean)
+            except subprocess.TimeoutExpired:
+                rc, out, err = -1, "", "harness timeout"
+            wall = time.time() - t0
 
-        state = Path(m["workspace"]).parent / "state"
-        calls = oc_export.count_model_calls(state)
-        spent += calls
+            toks = oc_export.input_tokens(state)
+            window.append((time.time(), toks))
+            spent += oc_export.count_model_calls(state)
+            # Authoritative, unlike a stderr grep: the first run's stderr heuristic
+            # produced a false positive on an instance that completed fine.
+            limited = oc_export.rate_limit_error(state)
+            if not limited or attempt == RETRIES:
+                break
+            print(f"        {m['task_id']}: {limited} -- retry {attempt + 1}/{RETRIES}")
+            # A 429 aborts before the agent edits anything, so the workspace is still a
+            # clean starting state; rebuild it anyway rather than assume that.
+            shutil.rmtree(ws); shutil.rmtree(state, ignore_errors=True)
+            generate(m["seed"]).materialize(ws)
+            state.mkdir(exist_ok=True)
 
         w = generate(m["seed"])
-        v = w.check(Path(m["workspace"]))
-
+        v = w.check(ws)
         ep = oc_export.export(state, m["task_id"], m["seed"], arm="A",
                               config={"model": model, "rc": rc, "lean": lean,
                                       "wall_s": round(wall, 1)})
@@ -143,43 +185,68 @@ def run(model: str, template: str, budget: int, timeout: int, lean: bool = False
         # `edited` is the tool-using analogue of 001's format_ok column: an agent that
         # never wrote anything and one that wrote a wrong fix are different failures.
         ep.config["edited"] = bool(v.edited)
-        ep.config["rate_limited"] = ("429" in err) or ("rate" in err.lower() and "limit" in err.lower())
+        ep.config["rate_limited"] = limited
         writer.write(ep)
 
         rows.append({"task_id": m["task_id"], "passed": bool(v.passed),
-                     "edited": bool(v.edited), "calls": calls,
-                     "rc": rc, "wall_s": round(wall, 1),
-                     "rate_limited": ep.config["rate_limited"]})
+                     "edited": bool(v.edited), "calls": ep.config["api_requests"],
+                     "in_tokens": toks, "rc": rc, "wall_s": round(wall, 1),
+                     "rate_limited": limited})
         flag = "PASS" if v.passed else ("edited, still failing" if v.edited else "untouched")
         print(f"  {i:2d}/{len(manifest)}  {m['task_id']:26s} {flag:22s} "
-              f"{calls:3d} calls  {wall:5.0f}s  [{spent}/{budget}]")
+              f"{ep.config['api_requests']:3d} calls {toks:7,d} tok {wall:5.0f}s "
+              f"[{spent}/{budget}]" + ("  RATE-LIMITED" if limited else ""))
 
     (RUNS / "screen.json").write_text(json.dumps(rows, indent=2))
     print(f"\n  traces -> {writer.path}")
     _verdict(rows, spent)
-    if rows:
-        print("\n  Run `export.py describe` on one state dir before trusting these traces:\n"
-              f"    uv run {Path(__file__).parent}/export.py describe "
-              f"{Path(manifest[0]['workspace']).parent / 'state'}")
 
 
 def _verdict(rows: list[dict], spent: int = 0) -> None:
+    """Report the clean-run rate, not the raw rate.
+
+    A 429 abort is a harness event, not a capability failure: the agent never got to
+    work. The first screen run (2026-09-10) scored 7/10 = 0.70 and read FUNDABLE, but all
+    three failures were 429s and every instance that ran to completion passed -- 7/7,
+    which is a CEILING. Counting the two kinds of failure together inverted the verdict."""
     if not rows:
         print("  no instances completed.")
         return
     n = len(rows)
-    p = sum(r["passed"] for r in rows) / n
-    edited = sum(r["edited"] for r in rows)
-    limited = sum(r["rate_limited"] for r in rows)
-    print(f"\n  pass {sum(r['passed'] for r in rows)}/{n} = {p:.2f}   "
-          f"edited {edited}/{n}   rate-limited {limited}/{n}   {spent} requests")
+    raw = sum(r["passed"] for r in rows)
+    clean = [r for r in rows if not r["rate_limited"]]
+    limited = n - len(clean)
+    print(f"\n  raw          {raw}/{n} = {raw / n:.2f}   (counts 429 aborts as failures)")
+    if not clean:
+        print("  every instance was rate-limited: no capability signal at all.")
+        return
+    cp = sum(r["passed"] for r in clean)
+    p = cp / len(clean)
+    lo, hi = _wilson(cp, len(clean))
+    print(f"  clean        {cp}/{len(clean)} = {p:.2f}   Wilson95 [{lo:.2f}, {hi:.2f}]")
+    print(f"  rate-limited {limited}/{n}   edited {sum(r['edited'] for r in rows)}/{n}"
+          f"   {spent} requests")
+    tried_and_failed = sum(1 for r in clean if not r["passed"] and r["edited"])
+    print(f"  worked the task and got it wrong: {tried_and_failed}")
     if p < 0.25:
         print("  -> FLOOR (<0.25). Backend cannot fund 007; a floored arm is not a comparison.")
     elif p > 0.85:
         print("  -> CEILING (>0.85). Harden the 12-defect pool before running three arms.")
     else:
         print("  -> FUNDABLE (0.25-0.85). Pick k and n from the RPD budget.")
-    print(f"  n={n} on a 12-defect pool. Says nothing about repair tasks in general.")
+    print(f"  n={len(clean)} clean on a 12-defect pool. Says nothing about repair tasks "
+          "in general.")
+
+
+def _wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
+    if n == 0:
+        return (0.0, 1.0)
+    from math import sqrt
+    p = k / n
+    d = 1 + z * z / n
+    c = (p + z * z / (2 * n)) / d
+    h = z * sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d
+    return (max(0.0, c - h), min(1.0, c + h))
 
 
 def report() -> None:
@@ -189,7 +256,8 @@ def report() -> None:
     rows = json.loads(path.read_text())
     for r in rows:
         flag = "PASS" if r["passed"] else ("edited" if r["edited"] else "untouched")
-        print(f"  {r['task_id']:26s} {flag:12s} {r['calls']:3d} calls  {r['wall_s']:5.0f}s")
+        print(f"  {r['task_id']:26s} {flag:12s} {r['calls']:3d} calls  {r['wall_s']:5.0f}s"
+              + (f"  [{r['rate_limited']}]" if r.get("rate_limited") else ""))
     _verdict(rows, sum(r["calls"] for r in rows))
 
 
