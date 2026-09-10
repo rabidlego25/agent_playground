@@ -18,7 +18,7 @@ stated hypothesis and a trace someone else could re-analyze.
 | 004 | Does the ensembling gain survive at the top of the prompt axis? | complete | **Yes, and it grows.** Voting still beats one sample on the reasoning prompt (p=0.0094) and the k=7 gain rose +0.113 → +0.195, because the prompt made errors *more* independent (c 0.339 → 0.239). Deliberation is now significantly *worse* than not communicating (0.71 vs 0.86, p<0.0001) at 1.2× the cost. [README](experiments/004-prompt-ceiling/README.md) |
 | 005 | Does the mixed panel clear the Condorcet threshold once every member is prompted at its ceiling? | complete | **No, and the prompt made it worse.** The gain does not transfer: qwen2.5 +0.154, mistral +0.108, llama3.1 −0.026. The vote now loses to its best member by 0.09 (p=0.0001) vs 0.08 in 003. Cross-family error independence stacks with prompting (c 0.249 → 0.211) — but independence without competence buys nothing. Deliberation cost the strongest member −0.123, where neither intervention alone cost it anything. [README](experiments/005-panel-at-ceiling/README.md) |
 | 006 | Where does the ensembling curve saturate on the reasoning prompt, and does `c` predict it? | complete | **0.877 at k=15 — inside the pre-registered band [0.86, 0.93], but the band also contained the named alternative (0.862), so `c` got no discriminating test.** Saturation is at k=5, one step later than bare, not the wide margin 004 implied. The answer is in at least one of 15 draws on **0.979** of tasks: plurality, not sampling, is now the bottleneck. [README](experiments/006-ensemble-asymptote/README.md) |
-| 007 | Does role-specialised inter-agent routing beat one well-prompted agent, on a tool-using task? | designed | Out-of-sample test of 001–005 against a deployed 9-agent OpenClaw config. Committed before any run: **C > A > B** — parallel-silent beats one good prompt beats the role panel, which spends ≥3× the tokens. [README](experiments/007-openclaw-role-routing/README.md) |
+| 007 | Does role-specialised inter-agent routing beat one well-prompted agent, on a tool-using task? | pre-registered, pilot run, blocked on backend | Prediction committed before any run: **C > A > B**. Harness verified end to end 2026-09-10 — task world, oracle, sandbox, and trace target all work. **The Groq free tier cannot run it:** 8,000 TPM against a 16.7k-token default tool surface, ~1 agent turn per minute, and arm B would hit limits far more than arm A — a confound, not just slowness. [README](experiments/007-openclaw-role-routing/README.md) · [PILOT](experiments/007-openclaw-role-routing/PILOT.md) |
 
 Keep this table current. A repo of fifty experiments with no index is write-only — you re-run what
 you already answered.
@@ -52,8 +52,14 @@ results/       raw run artifacts, append-only
 
 Updated 2026-09-10. The shared harness (`lib/trace.py`, `lib/tasks.py`, `lib/models.py`) and the
 instrument probes in `tests/` are in place and calibrated (`reports/2026-08-30-calibration.pdf`:
-task-set variance 0.163, run-to-run 0.050). 001, 003, 004, 005 and 006 are complete; 002 and 007
-are designed and unrun.
+task-set variance 0.163, run-to-run 0.050). 001, 003, 004, 005 and 006 are complete; 002 is
+designed and unrun; 007 is pre-registered with a working harness and no viable backend yet.
+
+The harness gained its first multi-step world on 2026-09-10: `lib/worlds/repair.py` generates a
+workspace an agent works in rather than a prompt it answers, and `tests/probe_repair_world.py`
+asserts four oracle properties per instance before any run. Writing that probe rejected four of
+twelve mutation cells and caught a bug in the oracle itself — `__pycache__` travelled with the
+workspace copy, so a stale `.pyc` could score the module the agent had already replaced.
 
 001 and 003 both landed on the same open question — every configuration effect in them was
 measured on a prompt that does not ask the model to reason. 004 closed it: the configuration
@@ -89,8 +95,10 @@ That disqualified the estimator the pre-registration was going to use, and it wa
 because 004's traces were kept — replay over re-run, paying off directly.
 
 Next: the 0.102 gap between the 0.979 oracle ceiling and the 0.877 vote is the largest thing on
-the table, and it is a selection problem, not a sampling one; 002 and 007 are designed and
-unrun; and 005 owes a pre-registered llama3.1 re-run at max_tokens=1600 (the cap bound on 11.8% of tasks — the
+the table, and it is a selection problem, not a sampling one; 002 is designed and unrun; 007
+needs a backend that is not rate-limited into a confound (its pilot is written up in
+`experiments/007-openclaw-role-routing/PILOT.md`); and 005 owes a pre-registered llama3.1
+re-run at max_tokens=1600 (the cap bound on 11.8% of tasks — the
 diagnostic says truncation is not the cause of its null, so this is a confirmation, not a
 decider). 005's −0.123 to the strong member rests on two points, one of which also changes
 family; a gap-dose curve reusing 004's seven qwen draws as peer blocks would separate

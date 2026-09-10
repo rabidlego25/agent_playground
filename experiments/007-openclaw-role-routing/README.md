@@ -1,7 +1,12 @@
 # 007 — Does role-specialised inter-agent routing beat one well-prompted agent?
 
-**Status:** designed, not run. **Created:** 2026-09-10. **Prediction committed in this file
-before any run.**
+**Status:** pre-registered; harness verified; **blocked on a viable backend.** **Created:**
+2026-09-10. **Prediction committed in this file before any run**, and no run has been taken
+against it. The pilot of 2026-09-10 (`PILOT.md`) wired OpenClaw 2026.9.3 end to end and then
+found that the Groq free tier's 8,000 TPM cap makes the comparison unattributable: arm B would
+hit rate limits far more often than arm A, so its predicted loss could not be read as
+deliberation. The task world, oracle, sandbox and trace export all work and are unchanged by
+this.
 
 ## Question
 
