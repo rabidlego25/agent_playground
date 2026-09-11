@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import random
 import sys
+import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -104,7 +105,10 @@ def deliberate(cond: str) -> None:
     with TraceWriter(stem, results_dir=RUNS) as w:
         for i, tid in enumerate(todo, 1):
             entry, t = entries[tid], ts[tid]
-            rng = random.Random(hash((tid, cond, "009")) & 0xFFFFFFFF)
+            # zlib.crc32, not hash(): Python randomises string hashing per
+            # process, so hash()-seeded blocks cannot be regenerated and a
+            # resumed run mixes draws from two different seeds.
+            rng = random.Random(zlib.crc32(f"{tid}|{cond}|009".encode()))
             peers = peer_block(entry, accs, rng)
             text = "\n\n".join(f"Assistant {chr(65 + j)} said:\n{pr['action']}"
                                for j, pr in enumerate(peers))

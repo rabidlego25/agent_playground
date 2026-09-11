@@ -1,7 +1,44 @@
 # 009 — Is deliberation harm set by P(no correct peer), or by mean peer competence?
 
-**Status:** designed 2026-09-11, unrun. **Predictions committed in this file before any
-revision call was made.**
+**Status:** complete 2026-09-11. n=139 per condition, 417 local calls, no API cost.
+**H2 confirmed, H1 not established, H3 refuted — and the refutation is the finding.**
+
+| condition | peers | mean | max | realised mean | P(k=0) | delta | 95% CI |
+|---|---|---|---|---|---|---|---|
+| U33 | (0.33, 0.33, 0.33) | 0.333 | 0.33 | **0.283** | 0.360 | **−0.209** | [0.359, 0.522] |
+| S33 | (1.00, 0.00, 0.00) | 0.333 | 1.00 | 0.333 | 0.000 | −0.122 | [0.443, 0.606] |
+| S67 | (1.00, 0.50, 0.50) | 0.667 | 1.00 | 0.676 | 0.000 | **+0.086** | [0.655, 0.800] |
+
+- **H2 confirmed, and it refutes the claim this experiment was built to check.**
+  S67 − S33 = **+0.209** at identical max (1.00), exact McNemar discordant 15/44,
+  **p=0.0002**. Adding competent members beyond the first is worth 0.209. **Max is not the
+  composition statistic**, and 008's note was wrong to say so.
+- **H1 not established.** S33 − U33 = +0.086 against a predicted +0.074, but McNemar is
+  20/32, **p=0.126**. Worse, **U33's realised peer accuracy came out 0.283, not 0.333** —
+  2.2 standard errors low on 417 Bernoulli draws — so the two conditions are not matched on
+  mean after all, and the drift runs in the direction that flatters H1. Conditioning on the
+  realised draws instead, composition alone predicts +0.119 where +0.086 was observed. The
+  effect is in the predicted direction and does not clear significance. Stated as unproven.
+- **H3 refuted.** 008's per-k constants do not transfer to three-peer blocks:
+
+  | k | n | 009 | 008 | diff |
+  |---|---|---|---|---|
+  | 0 | 50 | −0.460 | −0.448 | −0.012 |
+  | 1 | 234 | **−0.132** | **−0.011** | **−0.121** |
+  | 2 | 94 | +0.160 | +0.202 | −0.042 |
+  | 3 | 39 | +0.128 | — | (008 never observed it) |
+
+> **What replaces it: the delta tracks the *fraction* of peers that are correct, not the
+> count.** k=1 means a tie in a two-peer block and a 1-against-2 minority in a three-peer
+> one, which is why the count model breaks and the fraction model does not. Sorted by
+> fraction, the two experiments interleave into one monotone curve — 0.00 → −0.45, 0.33 →
+> −0.13, 0.50 → −0.01, 0.67 → +0.16, 1.00 → +0.19 — with the two block sizes agreeing at
+> both ends where they overlap. Leave-one-condition-out, that curve predicts all **eight**
+> conditions across 008 and 009 with a **max residual of 0.034** (mean 0.023), no condition
+> contributing to its own prediction. The count model missed by up to 0.111.
+>
+> **"One correct peer is enough" is false.** One correct peer out of three is −0.132. It was
+> enough in 008 only because one of two is half of them.
 
 ## Question
 

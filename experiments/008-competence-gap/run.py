@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import random
 import sys
+import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -116,7 +117,11 @@ def deliberate(cond: str) -> None:
             entry, t = entries[tid], ts[tid]
             # Seeded per task and condition: the peer block is reproducible from the
             # trace, and two conditions never draw the same peers by accident.
-            rng = random.Random(hash((tid, cond)) & 0xFFFFFFFF)
+            # zlib.crc32, not hash(): Python randomises string hashing per
+            # process, so the blocks the 2026-09-11 run drew cannot be
+            # regenerated from this code. The traces record every peer answer,
+            # so the analysis stands; the draw does not reproduce.
+            rng = random.Random(zlib.crc32(f"{tid}|{cond}".encode()))
             peers = peer_block(entry, p, rng)
             text = "\n\n".join(f"Assistant {chr(65 + j)} said:\n{pr['action']}"
                                for j, pr in enumerate(peers))

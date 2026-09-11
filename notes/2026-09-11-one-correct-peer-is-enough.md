@@ -1,5 +1,15 @@
 # Deliberation harm is a step function of how many peers are right
 
+> **Title retracted 2026-09-11 by 009. The variable is the *fraction* of peers that are
+> correct, not the count, and one correct peer is not enough.** With three peers, one
+> correct peer gives **−0.132**, not the ≈−0.01 this note reports for one of two. The count
+> model below fits every number in 008 because all five of its conditions used two peers,
+> where count and fraction are the same thing up to scaling. The closing section's claim
+> that the composition statistic is **max(member accuracy)** is refuted outright: at
+> identical max, raising mean peer accuracy from 0.33 to 0.67 is worth **+0.209**
+> (p=0.0002). Everything about 008's own five conditions still holds; the extrapolation to
+> other block sizes did not. See `2026-09-11-fraction-not-count.md`.
+
 **2026-09-11, from 008.** qwen2.5 at B1n, n=139 tasks, peers are qwen's own scored draws so
 family, prompt, weights and temperature are identical to the subject and only peer accuracy
 moves. The subject's round-one answer is the same draw in every condition, so conditions

@@ -20,6 +20,7 @@ stated hypothesis and a trace someone else could re-analyze.
 | 006 | Where does the ensembling curve saturate on the reasoning prompt, and does `c` predict it? | complete | **0.877 at k=15 — inside the pre-registered band [0.86, 0.93], but the band also contained the named alternative (0.862), so `c` got no discriminating test.** Saturation is at k=5, one step later than bare, not the wide margin 004 implied. The answer is in at least one of 15 draws on **0.979** of tasks: plurality, not sampling, is now the bottleneck. [README](experiments/006-ensemble-asymptote/README.md) |
 | 007 | Does role-specialised inter-agent routing beat one well-prompted agent, on a tool-using task? | **arm B parked**; harness, world and pool complete | Prediction committed before any run: **C > A > B**. Never tested — **the chosen add-on runs as a single agent on a repair task** (1 of 9 agents active, 0 inter-agent messages): its delegation is triggered by named research-paper workflows and none fits code repair, so arm B could only deliberate if we wrote the treatment ourselves. Produced four findings without its main comparison — free-tier quota mechanics, two trace-schema corrections that would have silently faked H2, and defect detectability. [README](experiments/007-openclaw-role-routing/README.md) · [PILOT](experiments/007-openclaw-role-routing/PILOT.md) · [SCREEN](experiments/007-openclaw-role-routing/SCREEN.md) · [ARM-B](experiments/007-openclaw-role-routing/ARM-B-PILOT.md) |
 | 008 | Does deliberation harm track the competence gap, or family mismatch? | complete | **The gap, and 005 needs no family explanation** — delta runs +0.180 / +0.101 / +0.065 / −0.115 / **−0.360** as peer accuracy falls 1.00 → 0.15 (H1 monotone, H2 and H3 both confirmed), where 005's cross-family −0.123 at a comparable gap is 2.9× milder. **But the gap is not the cause.** Bucketed by how many peers were correct, the delta is identical in all five conditions (0 → −0.45, 1 → −0.01, 2 → +0.20) and only the *shares* move (0-correct 0% → 81%); those three constants reproduce every condition's aggregate to within the 0.050 noise floor. **One correct peer is enough to stop the damage.** [README](experiments/008-competence-gap/README.md) |
+| 009 | Is deliberation harm set by P(no correct peer), or by mean peer competence? | complete | **Neither — it tracks the *fraction* of peers that are correct.** Three peers instead of two breaks 008's count model exactly where count and fraction separate: k=1 is −0.132 here against −0.011 in 008 (n=234). Sorted by fraction the two experiments form one monotone curve that predicts all **eight** conditions leave-one-out with max residual **0.034**. **Refutes 008's "max, not mean"**: at identical max, raising mean 0.33→0.67 is worth **+0.209** (p=0.0002). [README](experiments/009-panel-composition/README.md) |
 
 Keep this table current. A repo of fifty experiments with no index is write-only — you re-run what
 you already answered.
@@ -53,7 +54,7 @@ results/       raw run artifacts, append-only
 
 Updated 2026-09-11. The shared harness (`lib/trace.py`, `lib/tasks.py`, `lib/models.py`) and the
 instrument probes in `tests/` are in place and calibrated (`reports/2026-08-30-calibration.pdf`:
-task-set variance 0.163, run-to-run 0.050). 001, 003, 004, 005, 006 and 008 are complete; 002 is
+task-set variance 0.163, run-to-run 0.050). 001, 003, 004, 005, 006, 008 and 009 are complete; 002 is
 designed and unrun; 007's arm B is parked after its scaffold turned out not to be one.
 
 The harness gained its first multi-step world on 2026-09-10: `lib/worlds/repair.py` generates a
@@ -124,11 +125,24 @@ response is close to a step. Competence matters only because it sets P(zero corr
 dissolves the apparent conflict between 001 and 004: "hurts" and "helps" are one curve read at two
 peer accuracies. See `notes/2026-09-11-one-correct-peer-is-enough.md`.
 
-Next: **008's rule needs its own test — if one correct peer is enough, the composition statistic
-that matters is max(member accuracy), not mean**, which is a different quantity from the Condorcet
-threshold 003 and 005 were built around and predicts a 1-strong/2-weak panel is safe where three
-mediocre members are not. The 0.102 gap between 006's 0.979 oracle ceiling and its 0.877 vote is
-still the largest thing on the table, and it is a selection problem rather than a sampling one.
+009 then tested 008's closing claim instead of building on it, and refuted it. 417 more
+local calls, no API cost. **The variable is the fraction of peers that are correct, not the
+count.** 008's per-k constants were fitted entirely on two-peer blocks, where count and
+fraction are the same thing; at three peers they miss k=1 by 0.121 on n=234, because one
+correct peer is a tie in a pair and a minority in a trio. Sorted by fraction, both
+experiments lie on one monotone curve that predicts all eight of their conditions
+leave-one-condition-out with a maximum residual of 0.034. And **max is not the composition
+statistic**: holding max at 1.00 and moving mean peer accuracy 0.33 → 0.67 is worth +0.209
+(p=0.0002). "One correct peer is enough" was an artifact of measuring pairs. See
+`notes/2026-09-11-fraction-not-count.md`.
+
+Next: **the fraction rule needs a pre-registered test at a block size neither experiment
+used.** It was found post hoc after 009's H3 failed, and although it survives
+leave-one-out across eight conditions, 2 and 3 peers cannot separate "fraction correct" from
+"margin of correct over wrong" — every cell orders the same way under both. A 5-peer
+condition splits them. The 0.102 gap between 006's 0.979 oracle ceiling and its 0.877 vote is
+still the largest thing on the table, and it is a selection problem rather than a sampling
+one.
 002 is designed and unrun. 005 still owes a pre-registered llama3.1 re-run at max_tokens=1600.
 007's repair world, oracle, sandbox, exporter and calibrated pool all survive its arm B and are
 reusable by anything that needs a tool-using task with a programmatic oracle — what it lacks is a

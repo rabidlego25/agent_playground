@@ -139,14 +139,25 @@ Open:
   has not worked the chain and noise to one that has" is false as stated. With both peers correct
   the subject gains **+0.180** (38 wrong→right against 13 right→wrong). Peer answers carry
   capability; 004 saw net zero because at peers ≈ 0.69 the helpful and neutral blocks cancel.
-- **[008 opens, and it is now the sharpest one]** If one correct peer is enough, the composition
-  statistic that matters is **max(member accuracy), not mean** — a different quantity from the
-  Condorcet threshold 003 and 005 were built around. It predicts a 1-strong/2-weak panel is safe
-  where three uniformly mediocre members are not, and that adding a weak member to a strong pair
-  costs nothing. Directly testable with the same peer-block machinery: hold the block size fixed
-  and vary whether the *best* peer is correct, independently of the mean.
-- **[008 opens]** Is the step at 1 correct peer, or is it "at least one peer agrees with the
-  subject's own answer"? 008 cannot separate them — a correct peer usually agrees with a correct
+- ~~**[008 opens, and it is now the sharpest one]** If one correct peer is enough, the
+  composition statistic that matters is max(member accuracy), not mean.~~ **[009] Answered
+  2026-09-11: no, and the premise was wrong.** One correct peer is not enough — one of three
+  is −0.132. Holding max fixed at 1.00 and moving mean 0.33 → 0.67 is worth +0.209
+  (p=0.0002). The variable is the **fraction** of peers correct; 008 could not see it because
+  all five of its conditions used two peers. One curve fits both experiments, eight
+  conditions, leave-one-out max residual 0.034. See
+  [`2026-09-11-fraction-not-count.md`](2026-09-11-fraction-not-count.md).
+- **[009 opens, and it is now the sharpest one]** Fraction correct and *margin* (correct
+  minus wrong) order every cell in 008 and 009 identically, so neither experiment can
+  separate them. A 5-peer block does: fraction 2/5 and margin −1 pull apart. The fraction
+  model was found post hoc and deserves one pre-registered test at a block size neither
+  experiment used.
+- **[009 opens]** Does the curve cross zero at fraction 0.5 for any subject, or does the
+  crossing move with the subject's own competence? 009 has one subject at 0.647. A subject
+  well above or below its peers should cross somewhere else if the mechanism is evidential
+  rather than social.
+- **[008 opens, sharpened by 009]** Is the curve about the fraction *correct*, or the
+  fraction that *agrees with the subject's own answer*? 008 cannot separate them — a correct peer usually agrees with a correct
   subject. Constructing blocks where a peer is wrong *but* matches the subject's wrong answer
   would split the two, and it is assemblable from draws already on disk.
 - **[008 opens]** Peers in 008 are weak *samples* of a competent model, not a weaker model. Do
