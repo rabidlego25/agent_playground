@@ -138,7 +138,10 @@ def deliberate(cond: str) -> None:
                     tokens_in=c.tokens_in, tokens_out=c.tokens_out,
                     latency_ms=c.latency_ms,
                     meta={"parsed": parsed, "format_ok": fmt_ok,
-                          "correct": parsed == entry["gold"],
+                          # t.scored(), not string equality: the task's own scorer is what
+                          # 004 and 005 used, and 001's oracle bug is what happens when a
+                          # run invents its own comparison.
+                          "correct": t.scored(c.text),
                           "round1_parsed": prior,
                           "round1_correct": entry["subject"]["meta"]["correct"],
                           "peer_parsed": peer_answers,
@@ -149,7 +152,7 @@ def deliberate(cond: str) -> None:
                           "adopted_peer": changed and low in [a.lower() for a in peer_answers],
                           "wrong_answers_available": len(entry["wrong"]),
                           "cap_bound": c.tokens_out >= MAX_TOK})
-            w.write(ep.finish(verdict=parsed == entry["gold"], outcome=parsed))
+            w.write(ep.finish(verdict=t.scored(c.text), outcome=parsed))
             if i % 20 == 0 or i == len(todo):
                 print(f"  {i}/{len(todo)}")
 

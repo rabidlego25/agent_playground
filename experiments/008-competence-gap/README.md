@@ -1,6 +1,17 @@
 # 008 — Does deliberation harm scale with the competence gap, or with family mismatch?
 
-**Status:** pre-registered. **Created:** 2026-09-11. **Predictions committed in this file
+**Status:** H2 answered 2026-09-11 (P65 + P15, n=139); H1 and H3 pending P100/P40/P80.
+
+> **Result: delta +0.065 at gap 0.00, −0.360 at gap −0.47.** McNemar discordant 68/9,
+> p<1e−6. H2 lands on the gap-driven branch, and 005's cross-family −0.123 at a similar gap
+> is 2.9× smaller — family mismatch is not needed to explain deliberation harm.
+>
+> **The decomposition matters more than the headline.** Bucketed by how many peers were
+> correct, the delta is the same in both conditions (0 correct ≈ −0.44, 1 correct ≈ −0.04,
+> 2 correct ≈ +0.27) and only the *shares* move (0-correct: 10% → 81%). The causal variable
+> is the number of correct peers, not the gap; competence matters only because it sets
+> P(zero correct). One correct peer is enough to stop the damage. See
+> `notes/2026-09-11-one-correct-peer-is-enough.md`. **Created:** 2026-09-11. **Predictions committed in this file
 before any revision call was made.**
 
 ## Question
