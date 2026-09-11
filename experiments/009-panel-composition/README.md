@@ -1,0 +1,90 @@
+# 009 — Is deliberation harm set by P(no correct peer), or by mean peer competence?
+
+**Status:** designed 2026-09-11, unrun. **Predictions committed in this file before any
+revision call was made.**
+
+## Question
+
+008 found that qwen's delta depends on **k**, the number of correct peers in the block, and
+not on the competence gap: per-k deltas were identical across five conditions (k=0 −0.448,
+k=1 −0.011, k=2 +0.202) and only the mixture moved. Feeding each condition's P(k) through
+those three constants reproduced its aggregate delta to within 0.022.
+
+The note written from it (`notes/2026-09-11-one-correct-peer-is-enough.md`) claimed this
+makes the composition statistic **max(member accuracy), not mean**, and that a 1-strong /
+2-weak panel should be safe where three mediocre members are not. That was an inference from
+a model fitted entirely on **two i.i.d. peers**. Nothing in 008 varied block size or
+composition, so the claim is untested.
+
+This tests it, and it can fail in two distinguishable ways.
+
+## Design
+
+Same machinery as 008 — peers are qwen2.5's own scored draws from `004_samples.jsonl`, same
+139 tasks, subject's round-one answer is draw 0 and is never re-run, so conditions pair
+exactly on task. **Three peers** rather than two: composition cannot vary with two.
+
+| condition | peer accuracies | mean | max | P(k=0) |
+|---|---|---|---|---|
+| **U33** | (0.33, 0.33, 0.33) | 0.333 | 0.33 | 0.296 |
+| **S33** | (1.00, 0.00, 0.00) | 0.333 | 1.00 | 0.000 |
+| **S67** | (1.00, 0.50, 0.50) | 0.667 | 1.00 | 0.000 |
+
+The two comparisons cut in opposite directions, which is the point:
+
+- **U33 vs S33 — same mean, different max.** If mean competence is what matters these are
+  the same panel. If P(no correct peer) is what matters they are not.
+- **S33 vs S67 — same max, different mean.** If "one correct peer is enough" is literally a
+  threshold, these are the same. If the response keeps climbing above k=1, they are not.
+
+**Peer order is shuffled within every block.** S33's strong member is otherwise always
+Assistant A, and a positional regularity the subject could learn would confound the whole
+comparison. 008 did not need this because its peers were i.i.d.
+
+417 revision calls, local `ollama`, ~55 min at the 7.9 s/call measured in 005. No API quota,
+no money.
+
+## Predictions, committed before the run
+
+Using 008's pooled per-k constants (−0.448 / −0.011 / +0.202, with k=3 assumed to behave as
+k=2 since 008 never observed it):
+
+| condition | predicted delta |
+|---|---|
+| U33 | −0.085 |
+| S33 | −0.011 |
+| S67 | +0.149 |
+
+- **H1 (P(k=0) is the mechanism).** S33 − U33 = **+0.074**, and the sign is positive. At
+  matched mean, replacing three mediocre peers with one perfect and two useless ones *helps*.
+  - If the observed gap is **≥ +0.05** (the run-to-run noise floor), P(no correct peer) is
+    the mechanism and the composition advice in 008's note stands.
+  - If it is **≈ 0**, mean competence is what matters after all, 008's k-model is a
+    coincidence of its uniform design, and **that note's closing claim is wrong.**
+- **H2 (it is not a pure threshold).** S67 − S33 = **+0.160**, well clear of the floor. If
+  this comes out ≈ 0, the response saturates at one correct peer and "one correct peer is
+  enough" is literally true rather than approximately true — a stronger and cleaner claim
+  than 008 made, and it would mean adding competent members beyond the first buys nothing.
+- **H3 (the constants transfer out of sample).** The per-k deltas measured here at k=0..3
+  match 008's within the noise floor, and each condition's aggregate is reproduced by its
+  own observed P(k) times 008's constants, residual ≤ 0.05. This is the load-bearing test:
+  008 fitted those constants on two i.i.d. peers, and this applies them to three
+  heterogeneous ones. If H3 fails while H1 holds, the step is real but block-size-dependent.
+
+**What would falsify the whole framing:** U33 ≈ S33 ≈ S67. That would mean none of k, mean
+or max predicts the delta at fixed subject, and the 008 decomposition does not generalise
+past its own design.
+
+## Known weaknesses, stated in advance
+
+- **Peer accuracy 0.00 and 1.00 are achieved by selection**, so S33's weak members are
+  always wrong and its strong member always right. Real panels are not deterministic. This
+  is the sharpest available contrast, not a realistic panel, and the point is the mechanism.
+- **Same limitation as 008:** one model, one task family, depth 4, peers that are weak
+  *samples* of a competent model rather than genuinely weaker models.
+- **k=3 has no 008 prior.** Treating it as k=2 is an assumption, flagged here rather than
+  discovered afterwards.
+- **The 139-task set** excludes tasks qwen always or never gets right, so it is harder than
+  the full pool (solo 0.647 vs 0.692) and magnitudes do not transfer to it.
+- **n=139, one run per condition**, against a 0.050 run-to-run noise floor. H1's predicted
+  +0.074 clears that, but not by much; H2's +0.160 does comfortably.
