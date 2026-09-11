@@ -52,6 +52,7 @@ of the probe hold by construction on every instance rather than by hand-checking
 
 from __future__ import annotations
 
+import ast
 import copy
 import os
 import random
@@ -98,6 +99,16 @@ class Verdict:
     cases_total: int
     edited: bool
     error: str | None = None
+    per_module: dict[str, tuple[int, int]] = field(default_factory=dict)
+
+    def defects_fixed(self, defective: list[str]) -> int:
+        """How many of the defective groups now pass every hidden case.
+
+        The pass/fail bit discards most of a multi-defect run: it cannot separate an agent
+        that fixed none from one that fixed two of three. This is the measure the ladder
+        is built to read."""
+        return sum(1 for m in defective
+                   if m in self.per_module and self.per_module[m][0] == self.per_module[m][1])
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -106,6 +117,7 @@ class Verdict:
             "cases_total": self.cases_total,
             "edited": self.edited,
             "error": self.error,
+            "per_module": {k: list(v) for k, v in self.per_module.items()},
         }
 
 
@@ -162,15 +174,23 @@ class RepairWorld:
                 return Verdict(False, 0, self._case_count(), edited, str(exc))
 
         tail = (r.stdout + r.stderr).strip().splitlines()
+        per: dict[str, tuple[int, int]] = {}
+        for ln in tail:
+            if ln.startswith("MODULE "):
+                try:
+                    _, m, got_m, tot_m = ln.split()
+                    per[m] = (int(got_m), int(tot_m))
+                except ValueError:
+                    pass
         summary = next((ln for ln in reversed(tail) if ln.startswith("CASES ")), "")
         try:
             _, got, total = summary.split()
             passed_n, total_n = int(got), int(total)
         except ValueError:
             return Verdict(False, 0, self._case_count(), edited,
-                           (tail[-1] if tail else "no output")[:200])
+                           (tail[-1] if tail else "no output")[:200], per)
         return Verdict(r.returncode == 0 and passed_n == total_n,
-                       passed_n, total_n, edited, None)
+                       passed_n, total_n, edited, None, per)
 
     def _case_count(self) -> int:
         return self.hidden_cases
@@ -861,3 +881,270 @@ def generate(seed: int, template: str | None = None) -> RepairWorld:
     raise AssertionError(
         f"{tpl.name} seed={seed} params={params}: no mutation operator leaves the bug both "
         "invisible to the smoke suite and visible to the hidden suite")
+
+
+# --------------------------------------------------------------------------------------
+# Difficulty ladder (2026-09-11).
+#
+# Screens 1-5 measured arm A at 1.00 / 0.90 / 0.75 / 0.95 on a single-template pool. Those
+# pool to 50/57 = 0.88 and every run sits inside binomial noise of it: four rounds of
+# parameter tuning never moved the rate. The held-out check (SCREEN.md run 5) is what made
+# that visible, and its lesson is that the lever has to change the task.
+#
+# What the task actually is: an 18-31 line module with a precise specification, whose smoke
+# suite passes on the mutant *by construction* -- the visible cases are drawn from the ones
+# where the mutant agrees. So the agent never had a failing test to guide it and still
+# scored 0.95. Withholding test signal is therefore not a lever; it was already withheld.
+# What is left is the size of the code to audit and the number of defects hidden in it.
+#
+# The ladder moves those two separately, because conflating them is exactly the mistake
+# run 4 made when it changed MULTI_EDIT_RATE and the operator distribution at once:
+#
+#   L0   1 module,  1 defect    the current pool, measured 0.95
+#   L1   3 modules, 1 defect    size only -- 3x the code, same single defect, and the
+#                               agent is not told which of the three functions is wrong
+#   L2   3 modules, 3 defects   size and count -- one defect per module
+#
+# L1 isolates search cost. L2 adds compounding. Whichever cell lands in 0.60-0.70 becomes
+# the pool, and the ladder is measured in one sweep rather than tuned one knob at a time.
+# --------------------------------------------------------------------------------------
+
+COMPOSITE_NAME = "toolkit"
+GROUP_TAG = "# ---- group: {} ----"
+
+
+def group_sources(source: str) -> dict[str, str]:
+    """Split a composite module back into its groups, keyed by name.
+
+    The groups are delimited by an explicit tag line rather than by blank-line runs, so
+    this cannot silently mis-split when a rendered template happens to contain a blank
+    line in the wrong place. The tag also labels the groups for the agent, matching the
+    `## Group n` headings in the statement."""
+    out: dict[str, str] = {}
+    name = None
+    buf: list[str] = []
+    for line in source.splitlines():
+        if line.startswith("# ---- group: ") and line.rstrip().endswith(" ----"):
+            if name is not None:
+                out[name] = "\n".join(buf).strip("\n")
+            name = line[len("# ---- group: "):-len(" ----")].strip()
+            buf = []
+        else:
+            buf.append(line)
+    if name is not None:
+        out[name] = "\n".join(buf).strip("\n")
+    return out
+LEVELS: dict[str, tuple[int, int]] = {"L0": (1, 1), "L1": (3, 1), "L2": (3, 3)}
+
+
+def _retarget_imports(source: str, module: str) -> list[ast.stmt]:
+    """Rewrite `from <sub> import ...` to the composite module, via the AST.
+
+    Text substitution on generated code is how the oracle-format confound happened
+    (notes/2026-08-29-oracle-format-confound.md). Parsing and re-emitting cannot silently
+    match the wrong thing."""
+    tree = ast.parse(source)
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom) and node.module in _TEMPLATE_NAMES:
+            node.module = module
+    return tree.body
+
+
+def _compose_visible(subs: list[RepairWorld]) -> str:
+    """One smoke suite over the composite. Each sub-suite passes on its own mutant by
+    construction and the modules share no names, so the concatenation still passes."""
+    imports: list[ast.stmt] = []
+    body: list[ast.stmt] = []
+    for w in subs:
+        for node in _retarget_imports(w.visible_tests, COMPOSITE_NAME):
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                imports.append(node)
+            elif not (isinstance(node, ast.Expr) and isinstance(node.value, ast.Call)
+                      and getattr(node.value.func, "id", "") == "print"):
+                body.append(node)
+    mod = ast.Module(body=imports + body, type_ignores=[])
+    return ast.unparse(ast.fix_missing_locations(mod)) + '\n\nprint("smoke ok")\n'
+
+
+def _compose_hidden(subs: list[RepairWorld]) -> str:
+    """One hidden runner that tallies per module as well as overall.
+
+    Per-module scoring is the point. With k defects the pass/fail bit throws away most of
+    what the run measured: it cannot tell an agent that fixed none from one that fixed two
+    of three. Reporting both gives k Bernoulli observations per instance instead of one,
+    which is what makes n=20 per level informative about the per-defect rate."""
+    lines = ["import sys", 'sys.path.insert(0, ".")']
+    names: list[str] = []
+    for w in subs:
+        for node in _retarget_imports(w.hidden_tests, COMPOSITE_NAME):
+            if isinstance(node, ast.ImportFrom):
+                lines.append(ast.unparse(node))
+    # Each case is passed as a thunk, not a value. A defect that *raises* would otherwise
+    # kill the script at the first bad call and every later module would report nothing --
+    # and a missing MODULE line is indistinguishable from a clean one, so per-module
+    # scoring would silently credit groups that never ran.
+    lines += ["", "_tally = {}", "def check(fn, want, label, mod):",
+              "    p, t = _tally.get(mod, (0, 0))",
+              "    try:",
+              "        got = fn()",
+              "    except BaseException as exc:",
+              "        got = ('raised', type(exc).__name__)",
+              "    if got == want:", "        p += 1",
+              "    else:", "        print(f'FAIL {mod}/{label}: got {got!r} want {want!r}')",
+              "    _tally[mod] = (p, t + 1)", ""]
+    for w in subs:
+        names.append(w.module_name)
+        for node in ast.parse(w.hidden_tests).body:
+            if (isinstance(node, ast.Expr) and isinstance(node.value, ast.Call)
+                    and getattr(node.value.func, "id", "") == "check"):
+                call = node.value
+                call.args[0] = ast.Lambda(
+                    args=ast.arguments(posonlyargs=[], args=[], kwonlyargs=[],
+                                       kw_defaults=[], defaults=[]),
+                    body=call.args[0])
+                call.args.append(ast.Constant(value=w.module_name))
+                lines.append(ast.unparse(ast.fix_missing_locations(node)))
+    lines += ["",
+              "_p = sum(p for p, _ in _tally.values())",
+              "_t = sum(t for _, t in _tally.values())",
+              "for _m, (_mp, _mt) in sorted(_tally.items()):",
+              "    print(f'MODULE {_m} {_mp} {_mt}')",
+              'print(f"CASES {_p} {_t}")',
+              "sys.exit(0 if _p == _t else 1)"]
+    return "\n".join(lines) + "\n"
+
+
+def _compose_statement(subs: list[RepairWorld], n_defects: int) -> str:
+    """The composite spec. Which module is broken is deliberately not said -- that search
+    is the difficulty L1 exists to measure."""
+    n = len(subs)
+    plural = "" if n_defects == 1 else "s"
+    head = (f"# Task\n\n`{COMPOSITE_NAME}.py` provides {n} independent groups of "
+            f"functions. Each group has its own specification below.\n\n"
+            f"**{n_defects} of them contain{'s' if n_defects == 1 else ''} a defect.** "
+            f"The smoke tests pass and the module is still incorrect. You are not told "
+            f"which group{plural} {'is' if n_defects == 1 else 'are'} wrong.\n\n"
+            f"Fix `{COMPOSITE_NAME}.py` so every group matches its specification. "
+            f"Do not change any function signatures.\n")
+    parts = [head]
+    for i, w in enumerate(subs, 1):
+        body = w.statement
+        cut = body.find("\n", body.find("# Task"))
+        body = body[cut:].strip()
+        # Drop each sub-spec's own closing instruction: it names its own module file and
+        # claims that module is the broken one, which is false for the clean groups.
+        marker = "Something in here is wrong."
+        if marker in body:
+            body = body[:body.index(marker)].strip()
+        # Each sub-spec names its own file ("`ledger.py` applies ..."), which does not
+        # exist in a composite. Left in place it sends the agent looking for files that
+        # are not there -- a harness artefact that would read as a capability failure.
+        body = body.replace(f"`{w.module_name}.py`", f"Group {i}")
+        parts.append(f"## Group {i} — `{w.module_name}`\n\n{body}\n")
+    return "\n".join(parts)
+
+
+_TEMPLATE_NAMES = {t.name for t in REPAIR_TEMPLATES}
+
+
+def generate_level(seed: int, level: str = "L0") -> RepairWorld:
+    """One instance at a ladder level. See LEVELS and the comment above it.
+
+    Every composite is verified before it is returned, against the same three properties
+    the single-module pool rests on, checked by execution rather than by argument:
+
+      1. the clean composite passes the whole hidden suite;
+      2. the buggy composite fails at least one hidden case in *every* defective group and
+         no hidden case in any clean group -- so per-module scoring means what it says;
+      3. the smoke suite passes on the buggy composite.
+
+    Property 2 is the one composition could plausibly break: a defect that leaked across
+    group boundaries would make `defects_fixed` uninterpretable, and nothing about
+    concatenation guarantees on its own that it cannot.
+    """
+    if level not in LEVELS:
+        raise KeyError(level)
+    n_modules, n_defects = LEVELS[level]
+    if n_modules == 1 and n_defects == 1:
+        w = generate(seed)
+        w.difficulty |= {"level": level, "modules": 1, "defects": 1,
+                         "module_names": [w.module_name]}
+        return w
+    if n_modules > len(REPAIR_TEMPLATES):
+        raise ValueError(f"{level}: only {len(REPAIR_TEMPLATES)} templates exist")
+
+    rng = random.Random(seed * 7919 + 13)
+    picked = rng.sample(sorted(_TEMPLATE_NAMES), n_modules)
+    # Sub-seeds are spread far apart so two groups of one composite never draw the same
+    # specification, and so a group here is not the same instance as a single-module run
+    # of the same seed.
+    subs = [generate(seed * 31 + 977 * i, template=name)
+            for i, name in enumerate(picked)]
+    defective = sorted(rng.sample(range(n_modules), n_defects))
+
+    def _tagged(bodies: list[str]) -> str:
+        return "\n\n".join(f"{GROUP_TAG.format(w.module_name)}\n{b}"
+                            for w, b in zip(subs, bodies))
+
+    clean_src = _tagged([w.reference_source for w in subs])
+    buggy_src = _tagged([w.buggy_source if i in defective else w.reference_source
+                         for i, w in enumerate(subs)])
+    hidden = _compose_hidden(subs)
+    visible = _compose_visible(subs)
+
+    def _run(source: str, script: str) -> tuple[int, dict[str, tuple[int, int]], str]:
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            (d / f"{COMPOSITE_NAME}.py").write_text(source)
+            (d / "_s.py").write_text(script)
+            r = subprocess.run([sys.executable, "-B", "_s.py"], cwd=d,
+                               capture_output=True, text=True, timeout=60,
+                               env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
+        per = {}
+        for ln in (r.stdout + r.stderr).splitlines():
+            if ln.startswith("MODULE "):
+                _, m, p, t = ln.split()
+                per[m] = (int(p), int(t))
+        return r.returncode, per, (r.stdout + r.stderr)
+
+    rc, per_clean, out = _run(clean_src, hidden)
+    if rc != 0:
+        raise AssertionError(f"{level} seed={seed}: clean composite fails its own hidden "
+                             f"suite:\n{out[-400:]}")
+
+    _, per_buggy, out = _run(buggy_src, hidden)
+    for i, w in enumerate(subs):
+        p, t = per_buggy.get(w.module_name, (0, 0))
+        if i in defective and p == t:
+            raise AssertionError(
+                f"{level} seed={seed}: group {w.module_name} is marked defective but "
+                f"passes all {t} of its hidden cases")
+        if i not in defective and p != t:
+            raise AssertionError(
+                f"{level} seed={seed}: clean group {w.module_name} fails {t - p} hidden "
+                f"cases -- a defect leaked across group boundaries")
+
+    rc, _, out = _run(buggy_src, visible)
+    if rc != 0 or "smoke ok" not in out:
+        raise AssertionError(f"{level} seed={seed}: smoke suite does not pass on the "
+                             f"buggy composite:\n{out[-400:]}")
+
+    return RepairWorld(
+        task_id=f"repair-{level.lower()}-{seed}",
+        family="repair",
+        seed=seed,
+        statement=_compose_statement(subs, n_defects),
+        module_name=COMPOSITE_NAME,
+        buggy_source=buggy_src,
+        reference_source=clean_src,
+        visible_tests=visible,
+        hidden_tests=hidden,
+        hidden_cases=sum(t for _, t in per_clean.values()),
+        difficulty={"level": level, "modules": n_modules, "defects": n_defects,
+                    "module_names": [w.module_name for w in subs],
+                    "defective": [subs[i].module_name for i in defective],
+                    "mutations": [subs[i].difficulty["mutation"] for i in defective],
+                    "edits": sum(subs[i].difficulty["edits"] for i in defective),
+                    "hidden_cases": sum(t for _, t in per_clean.values()),
+                    "src_lines": len(buggy_src.splitlines())},
+    )

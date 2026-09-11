@@ -41,7 +41,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib.worlds import generate                                   # noqa: E402
 from lib.worlds.repair import (                                   # noqa: E402
-    MIN_VISIBLE, REPAIR_TEMPLATES, _call, _load, cell_id)
+    GROUP_TAG, LEVELS, MIN_VISIBLE, REPAIR_TEMPLATES, _call, _load,
+    cell_id, generate_level, group_sources)
 
 N = 60
 
@@ -50,6 +51,63 @@ def _run_visible(root: Path) -> bool:
     r = subprocess.run([sys.executable, "test_smoke.py"], cwd=root,
                        capture_output=True, text=True, timeout=30)
     return r.returncode == 0
+
+
+def _probe_levels(n: int = 30) -> list[str]:
+    """Properties 8 and 9, on the composite levels.
+
+    8. Per-module scoring is honest: repairing exactly one defective group credits exactly
+       one, and repairing all of them passes. If a defect leaked across group boundaries
+       the partial score would be wrong, and `defects_fixed` is the ladder's whole measure.
+    9. A composite is not secretly easier than its parts: the clean composite passes and
+       the buggy one fails, for every level and every seed drawn.
+
+    generate_level already asserts both at construction, so this re-checks them through
+    `check()` -- the path the screen actually scores with -- rather than through the
+    generator's own internals. An oracle that only verifies itself is the failure mode
+    notes/2026-08-29-oracle-format-confound.md is about."""
+    out: list[str] = []
+    print(f"\n  ladder -- {n} seeds per level, scored through check()")
+    for level, (n_mod, n_def) in LEVELS.items():
+        if n_mod == 1:
+            continue
+        credited_right = partials = 0
+        for seed in range(600, 600 + n):
+            w = generate_level(seed, level)
+            defective = w.difficulty["defective"]
+            with tempfile.TemporaryDirectory() as tmp:
+                root = w.materialize(Path(tmp) / "ws")
+                src = root / f"{w.module_name}.py"
+                v = w.check(root)
+                if v.passed:
+                    out.append(f"{w.task_id}: ships already passing")
+                if v.defects_fixed(defective) != 0:
+                    out.append(f"{w.task_id}: credits {v.defects_fixed(defective)} "
+                               f"fixed defects before any edit")
+                # repair one group at a time, by name, and demand exactly that credit
+                for k, name in enumerate(defective, 1):
+                    src.write_text(_repair_groups(w, defective[:k]))
+                    got = w.check(root).defects_fixed(defective)
+                    partials += 1
+                    if got == k:
+                        credited_right += 1
+                    else:
+                        out.append(f"{w.task_id}: repaired {k} of {len(defective)} "
+                                   f"groups, credited {got}")
+                src.write_text(w.reference_source)
+                if not w.check(root).passed:
+                    out.append(f"{w.task_id}: reference composite does not pass")
+        print(f"    {level}: {n} seeds, partial credit exact "
+              f"{credited_right}/{partials}")
+    return out
+
+
+def _repair_groups(w, names: list[str]) -> str:
+    """The buggy composite with the named groups replaced by their reference text."""
+    buggy, clean = group_sources(w.buggy_source), group_sources(w.reference_source)
+    return "\n\n".join(
+        f"{GROUP_TAG.format(m)}\n{(clean if m in names else buggy)[m]}"
+        for m in w.difficulty["module_names"])
 
 
 if __name__ == "__main__":
@@ -164,9 +222,14 @@ if __name__ == "__main__":
     if dead:
         failures.extend(dead)
 
+    failures += _probe_levels()
+
     if failures:
         print(f"\n{len(failures)} PROBLEMS:")
         for f in failures[:20]:
             print(f"  {f}")
         sys.exit(1)
-    print("\n  all seven properties hold: four per instance, three on the pool.")
+    print("\n  all nine properties hold: four per instance, three on the pool, "
+          "two on the ladder.")
+
+

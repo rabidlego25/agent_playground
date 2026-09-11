@@ -1,0 +1,3 @@
+{"task_id": "repair-l1-900", "seed": 900, "level": "L1", "workspace": "/Users/geneatabb/Documents/scratch/agent_research/experiments/007-openclaw-role-routing/runs/screen-L1-900/repair-l1-900/ws", "module": "toolkit", "defective": ["intervals"], "defects": 1}
+{"task_id": "repair-l1-901", "seed": 901, "level": "L1", "workspace": "/Users/geneatabb/Documents/scratch/agent_research/experiments/007-openclaw-role-routing/runs/screen-L1-900/repair-l1-901/ws", "module": "toolkit", "defective": ["intervals"], "defects": 1}
+{"task_id": "repair-l1-902", "seed": 902, "level": "L1", "workspace": "/Users/geneatabb/Documents/scratch/agent_research/experiments/007-openclaw-role-routing/runs/screen-L1-900/repair-l1-902/ws", "module": "toolkit", "defective": ["intervals"], "defects": 1}

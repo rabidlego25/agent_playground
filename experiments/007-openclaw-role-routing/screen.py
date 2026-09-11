@@ -39,7 +39,7 @@ sys.path.insert(0, str(ROOT))
 
 from lib.trace import TraceWriter                                  # noqa: E402
 from lib.worlds import generate                                    # noqa: E402
-from lib.worlds.repair import cell_id                              # noqa: E402
+from lib.worlds.repair import LEVELS, cell_id, generate_level      # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).parent))
 import export as oc_export                                         # noqa: E402
@@ -73,31 +73,35 @@ EXPECTED_PER_INSTANCE = 230_000     # measured 217,628-241,307 over three comple
 RETRIES = 2                   # a 429 aborts before editing, so a retry starts clean
 
 
-def _runs_dir(seed0: int) -> Path:
+def _runs_dir(seed0: int, level: str = "L0") -> Path:
     """Seed base 700 keeps the historical path; a held-out base gets its own directory.
 
     `prepare` deletes the tree it is given, so sharing one directory across seed bases
     would silently destroy the previous run's workspaces and session DBs -- the only
     record of what the agent actually did."""
+    if level != "L0":
+        return RUNS.parent / f"screen-{level}-{seed0}"
     return RUNS if seed0 == SEED0 else RUNS.parent / f"screen-{seed0}"
 
 
-def prepare(n: int = N, seed0: int = SEED0) -> list[dict]:
+def prepare(n: int = N, seed0: int = SEED0, level: str = "L0") -> list[dict]:
     """Fresh workspaces. A workspace an agent has already touched is not a starting
     state, so this always rebuilds."""
     global RUNS
-    RUNS = _runs_dir(seed0)
+    RUNS = _runs_dir(seed0, level)
     if RUNS.exists():
         shutil.rmtree(RUNS)
     RUNS.mkdir(parents=True)
     manifest = []
     for seed in range(seed0, seed0 + n):
-        w = generate(seed)
+        w = generate_level(seed, level)
         ws = w.materialize(RUNS / w.task_id / "ws")
         pre = w.check(ws)
         assert not pre.passed, f"{w.task_id}: ships already passing"
-        manifest.append({"task_id": w.task_id, "seed": seed,
-                         "workspace": str(ws), "module": w.module_name})
+        manifest.append({"task_id": w.task_id, "seed": seed, "level": level,
+                         "workspace": str(ws), "module": w.module_name,
+                         "defective": w.difficulty.get("defective", []),
+                         "defects": w.difficulty.get("defects", 1)})
     (RUNS / "manifest.jsonl").write_text(
         "".join(json.dumps(m) + "\n" for m in manifest))
     return manifest
@@ -151,12 +155,14 @@ def _pace(window: deque, expected: int = EXPECTED_PER_INSTANCE) -> float:
 
 
 def run(model: str, template: str, budget: int, timeout: int, lean: bool = False,
-        n: int = N, seed0: int = SEED0) -> None:
-    manifest = prepare(n, seed0)
+        n: int = N, seed0: int = SEED0, level: str = "L0") -> None:
+    manifest = prepare(n, seed0, level)
     # Held-out runs get their own trace stem: TraceWriter is append-only, and mixing a
     # validation run into the tuning run's trace would make the two indistinguishable
     # afterwards, which is the whole point of holding seeds out.
-    writer = TraceWriter("007_screen" if seed0 == SEED0 else f"007_screen_{seed0}")
+    stem = "007_screen" if (seed0 == SEED0 and level == "L0") else \
+        f"007_screen_{level}_{seed0}"
+    writer = TraceWriter(stem)
     spent = 0
     rows = []
     window: deque = deque()
@@ -200,11 +206,14 @@ def run(model: str, template: str, budget: int, timeout: int, lean: bool = False
             # A 429 aborts before the agent edits anything, so the workspace is still a
             # clean starting state; rebuild it anyway rather than assume that.
             shutil.rmtree(ws); shutil.rmtree(state, ignore_errors=True)
-            generate(m["seed"]).materialize(ws)
+            generate_level(m["seed"], m["level"]).materialize(ws)
             state.mkdir(exist_ok=True)
 
-        w = generate(m["seed"])
+        w = generate_level(m["seed"], m["level"])
         v = w.check(ws)
+        # With k defects the pass bit throws away most of the run: it cannot separate an
+        # agent that fixed none from one that fixed two of three. Both are recorded.
+        fixed = v.defects_fixed(m["defective"]) if m["defective"] else int(v.passed)
         ep = oc_export.export(state, m["task_id"], m["seed"], arm="A",
                               config={"model": model, "rc": rc, "lean": lean,
                                       "wall_s": round(wall, 1)})
@@ -213,14 +222,19 @@ def run(model: str, template: str, budget: int, timeout: int, lean: bool = False
         # never wrote anything and one that wrote a wrong fix are different failures.
         ep.config["edited"] = bool(v.edited)
         ep.config["rate_limited"] = limited
+        ep.config["defects"] = m["defects"]
+        ep.config["defects_fixed"] = fixed
         writer.write(ep)
 
-        rows.append({"task_id": m["task_id"], "seed": m["seed"],
+        rows.append({"task_id": m["task_id"], "seed": m["seed"], "level": m["level"],
                      "passed": bool(v.passed),
+                     "defects": m["defects"], "defects_fixed": fixed,
+                     "per_module": {k: list(val) for k, val in v.per_module.items()},
                      "edited": bool(v.edited), "calls": ep.config["api_requests"],
                      "quota_tokens": toks, "rc": rc, "wall_s": round(wall, 1),
                      "rate_limited": limited})
-        flag = "PASS" if v.passed else ("edited, still failing" if v.edited else "untouched")
+        flag = "PASS" if v.passed else (
+            f"{fixed}/{m['defects']} fixed" if v.edited else "untouched")
         print(f"  {i:2d}/{len(manifest)}  {m['task_id']:26s} {flag:22s} "
               f"{ep.config['api_requests']:3d} calls {toks:7,d} qtok {wall:5.0f}s "
               f"[{spent}/{budget}]" + ("  RATE-LIMITED" if limited else ""))
@@ -256,13 +270,31 @@ def _verdict(rows: list[dict], spent: int = 0) -> None:
           f"   {spent} requests")
     tried_and_failed = sum(1 for r in clean if not r["passed"] and r["edited"])
     print(f"  worked the task and got it wrong: {tried_and_failed}")
+    # Per-defect rate. With k defects per instance this has k times the observations of
+    # the pass rate, which is what makes n=20 per level informative -- run 5 showed n=20
+    # cannot resolve 0.75 from 0.95 on the pass rate alone.
+    kd = sum(r.get("defects", 1) for r in clean)
+    kf = sum(r.get("defects_fixed", int(r["passed"])) for r in clean)
+    if kd > len(clean):
+        q = kf / kd
+        qlo, qhi = _wilson(kf, kd)
+        print(f"  per-defect       {kf}/{kd} = {q:.2f}   Wilson95 [{qlo:.2f}, {qhi:.2f}]")
+        # If defects are found independently, all-k-fixed should be the per-defect rate to
+        # the k. A pass rate below that means the defects interact -- split attention, or
+        # a turn budget that runs out -- which is a finding rather than a nuisance.
+        k = clean[0].get("defects", 1)
+        print(f"  independence:    predicted pass {q ** k:.2f} if defects are independent, "
+              f"observed {p:.2f}")
     if p < 0.25:
         print("  -> FLOOR (<0.25). Backend cannot fund 007; a floored arm is not a comparison.")
     elif p > 0.85:
         print("  -> CEILING (>0.85). Harden the 12-defect pool before running three arms.")
     else:
         print("  -> FUNDABLE (0.25-0.85). Pick k and n from the RPD budget.")
-    cells = len({cell_id(generate(r["seed"])) for r in clean if "seed" in r}) or len(clean)
+    lv = clean[0].get("level", "L0")
+    cells = len({cell_id(generate(r["seed"])) if lv == "L0"
+                 else tuple(generate_level(r["seed"], lv).difficulty["mutations"])
+                 for r in clean if "seed" in r}) or len(clean)
     print(f"  n={len(clean)} clean, {cells} distinct pool cells. Says nothing about repair "
           "tasks in general.")
 
@@ -278,8 +310,8 @@ def _wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
     return (max(0.0, c - h), min(1.0, c + h))
 
 
-def report(seed0: int = SEED0) -> None:
-    path = _runs_dir(seed0) / "screen.json"
+def report(seed0: int = SEED0, level: str = "L0") -> None:
+    path = _runs_dir(seed0, level) / "screen.json"
     if not path.exists():
         sys.exit(f"no screen at {path} -- run it first")
     rows = json.loads(path.read_text())
@@ -301,15 +333,18 @@ def main() -> None:
     r.add_argument("--n", type=int, default=N, help="instances")
     r.add_argument("--seed0", type=int, default=SEED0,
                    help="first seed; 720 is the held-out set reserved by run 4")
+    r.add_argument("--level", default="L0", choices=sorted(LEVELS),
+                   help="ladder level: L0 1 module/1 defect, L1 3/1, L2 3/3")
     r.add_argument("--lean", action="store_true",
                    help="reduced tool surface; only needed on a TPM-starved backend")
     rp = sub.add_parser("report")
     rp.add_argument("--seed0", type=int, default=SEED0)
+    rp.add_argument("--level", default="L0", choices=sorted(LEVELS))
     a = p.parse_args()
     if a.cmd == "run":
-        run(a.model, a.template, a.budget, a.timeout, a.lean, a.n, a.seed0)
+        run(a.model, a.template, a.budget, a.timeout, a.lean, a.n, a.seed0, a.level)
     else:
-        report(a.seed0)
+        report(a.seed0, a.level)
 
 
 if __name__ == "__main__":

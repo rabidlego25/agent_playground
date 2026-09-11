@@ -1,0 +1,1 @@
+{"task_id": "repair-l2-900", "seed": 900, "level": "L2", "workspace": "/Users/geneatabb/Documents/scratch/agent_research/experiments/007-openclaw-role-routing/runs/screen-L2-900/repair-l2-900/ws", "module": "toolkit", "defective": ["pathgrid", "intervals", "ledger"], "defects": 3}

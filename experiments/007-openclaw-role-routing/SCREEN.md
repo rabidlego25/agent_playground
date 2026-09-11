@@ -341,3 +341,77 @@ next calibration needs n≥60 or a decision rule that does not depend on separat
 
 The harness itself is fine: 0/20 rate-limited for a third consecutive run, 219 requests,
 13–18s per instance. Nothing here is a backend problem.
+
+
+---
+
+# Run 6 — the difficulty ladder (pre-registered 2026-09-11, unrun)
+
+Run 5 said the lever has to change the task, not its parameters, and that a knob picked on
+n=20 is a knob picked on noise. This measures a ladder of three levels in one sweep instead
+of tuning one parameter at a time, and it is written before any request.
+
+## What the task actually was
+
+Reading the generator to design this turned up the thing that explains 0.95: **the smoke
+suite already passes on the mutant, by construction.** Visible cases are drawn from the set
+where the buggy module *agrees* with the reference (`repair.py`, the `vis` selection). So
+the agent never had a failing test to guide it, and still scored 0.95 on an 18–31 line
+module with a precise specification.
+
+Withholding test signal is therefore not available as a lever — it was already withheld. My
+earlier plan to add a "silent defect" level was wrong for that reason and was dropped. What
+remains is **how much code has to be audited** and **how many defects are in it**.
+
+## The ladder
+
+| level | modules | defects | source lines | hidden cases |
+|---|---|---|---|---|
+| L0 | 1 | 1 | 18–31 | 7–12 |
+| L1 | 3 | 1 | 73–77 | 29–35 |
+| L2 | 3 | 3 | 73–77 | 29–35 |
+
+L1 changes size alone — same single defect, 3× the code, and the agent is **not told which
+group is broken**. L2 adds count on top of size. Separating the two is the point: run 4
+moved `MULTI_EDIT_RATE` and the operator distribution together and could not tell which had
+acted.
+
+Composites are three existing templates concatenated into one `toolkit.py` with labelled
+group headers. Every group keeps its own specification, its own independent oracle and its
+own mutation operators, so nothing new had to be trusted.
+
+## Per-defect scoring, and why it matters more than the pass rate
+
+With k defects, pass/fail throws away most of the run — it cannot separate an agent that
+fixed none from one that fixed two of three. The hidden runner now tallies **per group**, so
+L2 yields 3 Bernoulli observations per instance instead of 1. That is the direct answer to
+run 5's problem: n=20 cannot resolve 0.75 from 0.95 on a pass rate, but 60 per-defect
+observations put a Wilson half-width of ~0.11 on the per-defect rate.
+
+## Predictions, committed before the run
+
+Let **q** be the per-defect fix rate. L0 measured 0.95 over the two most recent screens
+(19/20 on held-out seeds; 50/57 = 0.88 pooled over all four).
+
+- **H-size.** L1 < L0. Tripling the code to audit and hiding which of three groups is wrong
+  costs something. If **L1 ≥ 0.90**, search cost is not a lever either, and the remaining
+  explanation is that these specifications are simply easy to check against code — which
+  would make the whole template family unsuitable and is worth knowing.
+- **H-independence.** L2's pass rate ≈ q³, with q estimated from L2's own per-defect tally.
+  A pass rate **materially below q³** means the defects interact — split attention, or a
+  turn budget that runs out — and that interaction, not the count, is the difficulty.
+- **H-band.** At least one of L1, L2 lands in **0.60–0.85** on the pass rate. If L2 is still
+  above 0.85, three defects in 75 lines is not enough and the family needs replacing rather
+  than scaling.
+
+**What would falsify the design:** L1 ≈ L2 ≈ L0. That would say neither size nor count moves
+this model on this task family, and the honest response is to stop scaling the pool and
+change the task family — not to add L3.
+
+## Cost, stated in advance
+
+n=20 per level, 3 levels, ~12–18 calls per instance (composites are larger, so more turns).
+**~900 requests, two days of the 500 RPD free tier.** n=20 is chosen for the pass rate to be
+*indicative* and the per-defect rate to be *decisive*; the per-defect rate is what the level
+choice will rest on. If a level's pass rate lands near a band edge, it gets a held-out
+confirmation at fresh seeds before anything is built on it — the run-4 mistake, not repeated.
