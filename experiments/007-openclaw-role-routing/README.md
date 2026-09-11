@@ -1,11 +1,29 @@
 # 007 — Does role-specialised inter-agent routing beat one well-prompted agent?
 
-**Status:** pre-registered; harness verified; backend chosen; pool calibrated to 0.75.
-**Arm B pilot 2026-09-11 (`ARM-B-PILOT.md`): the chosen add-on cannot serve as arm B on a
-repair task — it ran as one agent, 0 inter-agent messages, because its delegation is
-triggered by named research-paper workflows and no repair-shaped workflow exists. H1 is
-not testable against this scaffold without authoring the treatment ourselves. Awaiting a
-decision on scaffold vs. task family.** **Created:** 2026-09-10. **Prediction committed in this file before any run**, and no run has been taken
+**Status:** 2026-09-11 — **arm B parked, pool calibration reopened, difficulty ladder built
+and unrun.** Five arm-A screens are in (`SCREEN.md`); run 6 is pre-registered and waiting on
+free-tier quota.
+
+- **Arm B cannot serve as arm B** (`ARM-B-PILOT.md`). The chosen add-on ran as one agent with
+  0 inter-agent messages: its delegation fires on named research-paper workflows, and no
+  repair-shaped workflow exists. Its shipped `agentToAgent` config does not even load on
+  2026.9.3. H1 is not testable against this scaffold without authoring the treatment
+  ourselves. 6 requests, against a 13–23 day run it made unnecessary.
+- **The pool was never hardened.** Screens 1–5 read 1.00 / 0.90 / 0.75 / 0.95 and pool to
+  50/57 = **0.88**, every one inside binomial noise of it. Run 4 read a low draw as a
+  hardening effect and shipped a parameter change on it; the held-out check (run 5, seeds
+  720–739) returned **0.95** against a pre-registered 0.71 and caught it. n=20 cannot resolve
+  0.75 from 0.95, so a screen at that size can detect a floor and nothing else.
+- **Why the task is easy**, found while building the ladder: the smoke suite already passes
+  on the mutant *by construction*, so the agent never had a failing test to guide it and
+  still scored 0.95 on an 18–31 line module. Withholding test signal is not an available
+  lever — it was already withheld.
+- **The ladder** (`lib/worlds/repair.py`, `LEVELS`) moves audit size and defect count
+  separately: L0 1 module/1 defect, L1 3 modules/1 defect, L2 3 modules/3 defects. Per-defect
+  scoring gives L2 three Bernoulli observations per instance. Predictions and bands are
+  committed in `SCREEN.md` run 6. ~900 requests, two days of quota.
+
+**Created:** 2026-09-10. **Prediction committed in this file before any run**, and no run has been taken
 against it. The pilot of 2026-09-10 (`PILOT.md`) wired OpenClaw 2026.9.3 end to end and then
 found that the Groq free tier's 8,000 TPM cap makes the comparison unattributable: arm B would
 hit rate limits far more often than arm A, so its predicted loss could not be read as
