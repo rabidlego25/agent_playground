@@ -15,6 +15,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN npm install -g openclaw@latest
 
+# jq is required by the arm B add-on's setup.sh. Without it the script still exits 0 but
+# silently skips writing the agentToAgent block -- i.e. it installs nine agents that cannot
+# talk to each other, which is the treatment 007 exists to measure.
+RUN apt-get update && apt-get install -y --no-install-recommends jq \
+    && rm -rf /var/lib/apt/lists/*
+
 # Unprivileged. The agent's blast radius is /work and nothing else.
 RUN useradd -m -u 1001 agent && mkdir -p /work && chown agent:agent /work
 USER agent
