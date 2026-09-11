@@ -19,6 +19,58 @@ oracle* is now the binding one. The binding quota is input tokens per minute (25
 requests, and arm B at 30-60 turns needs 165K-330K input tokens per instance, so it must be
 paced across several minutes.
 
+## Amendment 1 — 2026-09-11, before any main-run instance
+
+The design below was pre-registered on 2026-09-10 and is amended here, **before any arm B
+call has been made**, because the screen exposed two errors in it. Both amendments are
+recorded with their reasons rather than quietly applied; the original text is left intact
+below so the change is auditable.
+
+**1. Arm C is dropped. The main run is A vs B, n=160.**
+
+n=40 was chosen as "what the budget allows" and never checked against an effect size. At
+the magnitudes 004 and 006 measured (+0.15 ensembling, −0.20 deliberation), paired McNemar
+with rho=0.3 gives:
+
+| n | C>A (.80 vs .65) | A>B (.65 vs .45) |
+|---|---|---|
+| 40 | 0.14 | 0.22 |
+| 80 | 0.33 | 0.46 |
+| 160 | 0.65 | **0.81** |
+| 240 | 0.84 | 0.95 |
+
+n=40 had 14–22% power: a null result would have meant nothing, and would have been
+reported against a prediction this repo has spent five experiments building. Arm C is cut
+because it is the most expensive arm (k parallel copies per instance), because its
+ensembling leg is the part 004 and 006 already established, and because at arm A's
+measured rate the C>A comparison is unreachable at any n the budget allows — with arm A at
+0.90, even a *perfect* arm C gives p=0.125 at n=40.
+
+**H1 is therefore narrowed to its A > B leg**, which is the claim 001–005 actually built
+toward: the 9-agent routing config loses to one well-prompted agent. **H2 (cost) is
+unchanged.** **H3 needs a new independence baseline** — it was defined against arm C's
+independent runs, which no longer exist. The variance-floor runs this README already
+requires (arm A twice on the same instances) supply it, and that has to be confirmed
+before H3 is claimed, not after.
+
+**2. Full tool surface, not `--local-model-lean`.**
+
+Lean cuts a call from ~21,000 to 8,708 tokens, and an instance still passed 11/11 under it.
+It is rejected anyway: 007 predicts arm B loses, so a flag that reduces every agent's
+capability pushes in the direction of the hypothesis, and arm B is the arm the experiment is
+about. It also buys nothing on the schedule — RPD meters *requests*, lean cuts *tokens per
+request*, so the day count is identical either way.
+
+**Cost of the amended design.** Arm A 11 calls/instance (measured); arm B 30–60
+(PILOT.md's estimate, **never measured**). At n=160 that is 6,560–11,360 requests, or
+**13–23 days** at 500 RPD. The 10-day spread is arm B's unmeasured cost, and the run is not
+committed to until a short arm B pilot has measured it — the same pilot that must confirm
+the `agentToAgent` message shape H3 depends on.
+
+**Open, and gating the main run:** arm A is at 0.90 on the parameterised pool, above the
+0.85 ceiling. `lib/worlds/repair.py` gained multi-edit defects on 2026-09-11 to bring it
+toward 0.60–0.70; whether it lands there is unmeasured at the time of writing.
+
 ## Question
 
 001–005 measured, on a synthetic task with a programmatic oracle, that agents which read each
@@ -48,6 +100,9 @@ That prediction is committed here, before the first run.
 ## Arms
 
 All three run the same task instances, in the same sandbox, with the same tool policy.
+
+> **Amendment 1 (2026-09-11): arm C is dropped and n is 160.** The three-arm text below is
+> the original pre-registration, kept for the record.
 
 - **A — single agent, prompt at ceiling.** One OpenClaw agent, tools enabled, no
   `agentToAgent`. The prompt is tuned first (see *Procedure*), because a configuration effect

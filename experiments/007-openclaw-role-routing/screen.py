@@ -72,14 +72,14 @@ EXPECTED_PER_INSTANCE = 230_000     # measured 217,628-241,307 over three comple
 RETRIES = 2                   # a 429 aborts before editing, so a retry starts clean
 
 
-def prepare() -> list[dict]:
+def prepare(n: int = N) -> list[dict]:
     """Fresh workspaces. A workspace an agent has already touched is not a starting
     state, so this always rebuilds."""
     if RUNS.exists():
         shutil.rmtree(RUNS)
     RUNS.mkdir(parents=True)
     manifest = []
-    for seed in SEEDS:
+    for seed in range(700, 700 + n):
         w = generate(seed)
         ws = w.materialize(RUNS / w.task_id / "ws")
         pre = w.check(ws)
@@ -138,8 +138,9 @@ def _pace(window: deque, expected: int = EXPECTED_PER_INSTANCE) -> float:
         waited += sleep_for
 
 
-def run(model: str, template: str, budget: int, timeout: int, lean: bool = False) -> None:
-    manifest = prepare()
+def run(model: str, template: str, budget: int, timeout: int, lean: bool = False,
+        n: int = N) -> None:
+    manifest = prepare(n)
     writer = TraceWriter("007_screen")
     spent = 0
     rows = []
@@ -282,12 +283,13 @@ def main() -> None:
     r.add_argument("--template", default="gemini.template.json")
     r.add_argument("--budget", type=int, default=DEFAULT_BUDGET)
     r.add_argument("--timeout", type=int, default=360)
+    r.add_argument("--n", type=int, default=N, help="instances (seeds 700+)")
     r.add_argument("--lean", action="store_true",
                    help="reduced tool surface; only needed on a TPM-starved backend")
     sub.add_parser("report")
     a = p.parse_args()
     if a.cmd == "run":
-        run(a.model, a.template, a.budget, a.timeout, a.lean)
+        run(a.model, a.template, a.budget, a.timeout, a.lean, a.n)
     else:
         report()
 

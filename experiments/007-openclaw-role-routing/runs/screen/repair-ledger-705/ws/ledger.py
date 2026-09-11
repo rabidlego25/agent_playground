@@ -15,9 +15,6 @@ def apply(opening, txns):
                 continue
             balance -= amount
         elif kind == "fee":
-            if balance - amount < FLOOR:
-                rejected += 1
-                continue
             balance -= amount
         else:
             raise ValueError(kind)

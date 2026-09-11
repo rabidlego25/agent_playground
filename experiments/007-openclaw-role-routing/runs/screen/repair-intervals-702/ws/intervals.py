@@ -4,7 +4,7 @@
 def merge(spans):
     if not spans:
         return []
-    ordered = sorted(spans, key=lambda s: s[0])
+    ordered = list(spans)
     out = [list(ordered[0])]
     for start, end in ordered[1:]:
         if start <= out[-1][1]:

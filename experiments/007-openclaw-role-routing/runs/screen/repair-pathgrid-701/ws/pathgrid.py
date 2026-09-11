@@ -3,7 +3,7 @@
 from collections import deque
 
 WALL = "X"
-DELTAS = ((1, 0), (-1, 0), (0, 1), (0, -1))
+DELTAS = ((1, 0), (-1, 0), (0, 1))
 
 
 def steps(grid, start, goal):
@@ -28,4 +28,4 @@ def steps(grid, start, goal):
             if nxt not in seen and open_cell(nxt):
                 seen.add(nxt)
                 queue.append((nxt, dist + 1))
-    return -1
+    return 0

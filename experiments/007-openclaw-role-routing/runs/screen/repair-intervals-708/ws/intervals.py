@@ -15,4 +15,4 @@ def merge(spans):
 
 
 def covered(spans):
-    return sum(end - start for start, end in merge(spans))
+    return sum(end - start + 1 for start, end in merge(spans))
