@@ -11,8 +11,10 @@
 > 2 correct ≈ +0.27) and only the *shares* move (0-correct: 10% → 81%). The causal variable
 > is the number of correct peers, not the gap; competence matters only because it sets
 > P(zero correct). One correct peer is enough to stop the damage. See
-> `notes/2026-09-11-one-correct-peer-is-enough.md`. **Created:** 2026-09-11. **Predictions committed in this file
-before any revision call was made.**
+> `notes/2026-09-11-one-correct-peer-is-enough.md`.
+
+**Created:** 2026-09-11. **Predictions committed in this file before any revision call was
+made**, and left below exactly as written.
 
 ## Question
 
