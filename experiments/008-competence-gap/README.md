@@ -1,17 +1,36 @@
 # 008 — Does deliberation harm scale with the competence gap, or with family mismatch?
 
-**Status:** H2 answered 2026-09-11 (P65 + P15, n=139); H1 and H3 pending P100/P40/P80.
+**Status:** complete 2026-09-11. All five conditions, n=139 each, 695 revision calls,
+local `ollama`, no API cost. H1, H2 and H3 all confirmed.
 
-> **Result: delta +0.065 at gap 0.00, −0.360 at gap −0.47.** McNemar discordant 68/9,
-> p<1e−6. H2 lands on the gap-driven branch, and 005's cross-family −0.123 at a similar gap
-> is 2.9× smaller — family mismatch is not needed to explain deliberation harm.
->
-> **The decomposition matters more than the headline.** Bucketed by how many peers were
-> correct, the delta is the same in both conditions (0 correct ≈ −0.44, 1 correct ≈ −0.04,
-> 2 correct ≈ +0.27) and only the *shares* move (0-correct: 10% → 81%). The causal variable
-> is the number of correct peers, not the gap; competence matters only because it sets
-> P(zero correct). One correct peer is enough to stop the damage. See
-> `notes/2026-09-11-one-correct-peer-is-enough.md`.
+| condition | peer acc | gap | revised | delta | 95% CI | w→r | r→w | adopt |
+|---|---|---|---|---|---|---|---|---|
+| P100 | 1.00 | +0.35 | 0.827 | **+0.180** | [0.756, 0.881] | 38 | 13 | 0.27 |
+| P80 | 0.80 | +0.15 | 0.748 | +0.101 | [0.670, 0.813] | 36 | 22 | 0.33 |
+| P65 | 0.65 | 0.00 | 0.712 | +0.065 | [0.632, 0.781] | 34 | 25 | 0.38 |
+| P40 | 0.40 | −0.25 | 0.532 | −0.115 | [0.450, 0.613] | 23 | 39 | 0.40 |
+| P15 | 0.15 | −0.50 | 0.288 | **−0.360** | [0.219, 0.368] | 9 | 59 | 0.45 |
+
+- **H1 confirmed.** Strictly monotone P100 → P15: +0.180, +0.101, +0.065, −0.115, −0.360.
+  Exact McNemar against the P65 anchor: P100 p=0.026, P40 p=0.0019, P15 p<1e−6.
+  P80 does not separate from P65 (19/24, p=0.54) — the curve is monotone but its middle is flat.
+- **H2 confirmed, gap branch.** −0.360 at P15, far past the ≤ −0.10 threshold, and P40 gives a
+  third point on the same branch at −0.115. 005's cross-family −0.123 at a comparable gap is
+  **2.9× smaller**, so family mismatch is not needed to explain deliberation harm and shows no
+  sign of adding to it.
+- **H3 confirmed, and it falsifies the stronger reading 004 invited.** +0.180 at P100, ≥ the
+  pre-registered +0.10. 004 found net exactly zero at gap 0 and suggested peer answers might be
+  noise to an agent that has already worked the chain. They are not: given two correct peers the
+  subject gains 0.18. Deliberation *is* a capability channel — it just requires the capability to
+  be present in the block.
+
+> **The decomposition is the finding, not the curve.** Bucketed by how many peers were correct,
+> the delta is the same in every condition — k=0 ≈ **−0.448** (n=183), k=1 ≈ **−0.011** (n=185),
+> k=2 ≈ **+0.202** (n=327) — and only the *shares* move (P(0 correct): 0.00 → 0.81). Feeding each
+> condition's mixture through those three pooled constants reproduces its aggregate delta with
+> residuals of −0.022, −0.020, +0.017, +0.020, +0.005, every one inside the 0.050 noise floor.
+> **Peer accuracy acts entirely through P(at least one correct peer)** and not at all through what
+> happens given a peer block. See `notes/2026-09-11-one-correct-peer-is-enough.md`.
 
 **Created:** 2026-09-11. **Predictions committed in this file before any revision call was
 made**, and left below exactly as written.

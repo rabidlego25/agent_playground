@@ -125,14 +125,20 @@ Open:
   *competence gap* between a member and its peers?~~ **[008] Answered 2026-09-11: it tracks the
   gap, not family mismatch — but the gap is not the cause.** Holding family, prompt, weights and
   temperature fixed and moving only peer accuracy (peers are qwen's own scored draws from
-  `004_samples.jsonl`), qwen's delta goes +0.065 at gap 0.00 to **−0.360** at gap −0.47, McNemar
-  68/9, p<1e−6. 005's cross-family −0.123 at a comparable gap is 2.9× milder, so family mismatch
-  needs no separate explanation. **The decomposition replaces the question:** bucketed by how many
-  peers were correct, the delta is identical in both conditions — 0 correct ≈ −0.44, 1 correct
-  ≈ −0.04, 2 correct ≈ +0.27 — and only the shares move (0-correct 10% → 81%). Competence acts
-  only through P(zero correct peers). See
+  `004_samples.jsonl`), qwen's delta runs +0.180 / +0.101 / +0.065 / −0.115 / **−0.360** as peer
+  accuracy falls 1.00 → 0.15. Monotone (H1), −0.360 at gap −0.47 against 005's cross-family −0.123
+  at a comparable gap, 2.9× milder (H2), so family mismatch needs no separate explanation. **The
+  decomposition replaces the question:** bucketed by how many peers were correct, the delta is
+  identical in all five conditions — 0 correct −0.448, 1 correct −0.011, 2 correct +0.202 — and
+  only the shares move (0-correct 0% → 81%). Those three constants plus each condition's P(k)
+  reproduce every aggregate delta to within 0.022, inside the 0.050 noise floor: competence acts
+  *only* through P(zero correct peers). See
   [`2026-09-11-one-correct-peer-is-enough.md`](2026-09-11-one-correct-peer-is-enough.md).
 
+- **[004] retired outright by 008's H3.** 004's "peer answers are informative to an agent that
+  has not worked the chain and noise to one that has" is false as stated. With both peers correct
+  the subject gains **+0.180** (38 wrong→right against 13 right→wrong). Peer answers carry
+  capability; 004 saw net zero because at peers ≈ 0.69 the helpful and neutral blocks cancel.
 - **[008 opens, and it is now the sharpest one]** If one correct peer is enough, the composition
   statistic that matters is **max(member accuracy), not mean** — a different quantity from the
   Condorcet threshold 003 and 005 were built around. It predicts a 1-strong/2-weak panel is safe

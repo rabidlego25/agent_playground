@@ -197,6 +197,8 @@ def report() -> None:
             a_only, b_only, pv = mcnemar(x, y)
             print(f"    {ANCHOR} vs {cond:5s}  discordant {a_only}/{b_only}  p={pv:.4f}")
 
+    decompose()
+
     print("\n  Predictions from README.md, committed before the run:")
     print("    H1 delta declines monotonically P100 -> P15")
     print("    H2 delta at P15 <= -0.10  (gap-driven)  vs  > -0.05  (family-driven)")
@@ -204,6 +206,58 @@ def report() -> None:
     print(f"\n  Run-to-run noise floor on single calls is 0.050 "
           f"(tests/probe_variance_floor.py); any delta has to clear it.")
 
+
+def decompose() -> None:
+    """The aggregate delta is a mixture: P(k correct peers) x delta given k.
+
+    If delta-given-k is the same in every condition, then peer accuracy does nothing
+    except move the mixture, and the causal variable is k rather than the gap. That is
+    a strictly stronger claim than the headline curve, and it is the one this prints.
+    """
+    per = {}
+    for cond in CONDITIONS:
+        path = RUNS / f"008_delib_{cond}.jsonl"
+        if not path.exists():
+            continue
+        d: dict[int, list[int]] = {}
+        for e in read(path):
+            m = e["steps"][0]["meta"]
+            d.setdefault(sum(m["peer_correct"]), []).append(
+                m["correct"] - m["round1_correct"])
+        per[cond] = d
+    if not per:
+        return
+
+    pooled: dict[int, list[int]] = {}
+    for d in per.values():
+        for k, v in d.items():
+            pooled.setdefault(k, []).extend(v)
+    pk = {k: sum(v) / len(v) for k, v in pooled.items()}
+
+    print("\n  delta by number of correct peers, per condition")
+    print("    k  " + "  ".join(f"{c:>13s}" for c in per))
+    for k in sorted(pooled):
+        cells = []
+        for cond in per:
+            v = per[cond].get(k)
+            cells.append(f"{len(v):3d} {sum(v)/len(v):+7.3f}" if v else " " * 11)
+        print(f"    {k}  " + "  ".join(f"{c:>13s}" for c in cells))
+    print("    pooled  " + "  ".join(
+        f"k={k}: {pk[k]:+.3f} (n={len(pooled[k])})" for k in sorted(pk)))
+
+    # Reconstruct each condition's aggregate from the pooled per-k deltas and that
+    # condition's mixture alone. A residual inside the 0.050 noise floor means peer
+    # accuracy is fully mediated by P(k).
+    print("\n  aggregate reconstructed from P(k) x pooled delta(k)")
+    print(f"    {'cond':6s} {'P(0)':>6s} {'P(1)':>6s} {'P(2)':>6s} "
+          f"{'predicted':>10s} {'actual':>8s} {'resid':>7s}")
+    for cond, d in per.items():
+        n = sum(len(v) for v in d.values())
+        sh = {k: len(d.get(k, [])) / n for k in sorted(pk)}
+        pred = sum(sh[k] * pk[k] for k in sorted(pk))
+        act = sum(sum(v) for v in d.values()) / n
+        print(f"    {cond:6s} {sh.get(0,0):6.2f} {sh.get(1,0):6.2f} {sh.get(2,0):6.2f} "
+              f"{pred:+10.3f} {act:+8.3f} {act - pred:+7.3f}")
 
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "report"
