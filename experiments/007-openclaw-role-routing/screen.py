@@ -48,7 +48,8 @@ HERE = Path(__file__).parent
 SANDBOX = HERE / "sandbox"
 RUNS = HERE / "runs" / "screen"
 N = 10
-SEEDS = range(700, 700 + N)
+SEED0 = 700
+SEEDS = range(SEED0, SEED0 + N)
 IMAGE = "openclaw-007"
 ENV_FILE = Path.home() / "Documents/scratch/keys/openclaw.env"
 
@@ -72,14 +73,25 @@ EXPECTED_PER_INSTANCE = 230_000     # measured 217,628-241,307 over three comple
 RETRIES = 2                   # a 429 aborts before editing, so a retry starts clean
 
 
-def prepare(n: int = N) -> list[dict]:
+def _runs_dir(seed0: int) -> Path:
+    """Seed base 700 keeps the historical path; a held-out base gets its own directory.
+
+    `prepare` deletes the tree it is given, so sharing one directory across seed bases
+    would silently destroy the previous run's workspaces and session DBs -- the only
+    record of what the agent actually did."""
+    return RUNS if seed0 == SEED0 else RUNS.parent / f"screen-{seed0}"
+
+
+def prepare(n: int = N, seed0: int = SEED0) -> list[dict]:
     """Fresh workspaces. A workspace an agent has already touched is not a starting
     state, so this always rebuilds."""
+    global RUNS
+    RUNS = _runs_dir(seed0)
     if RUNS.exists():
         shutil.rmtree(RUNS)
     RUNS.mkdir(parents=True)
     manifest = []
-    for seed in range(700, 700 + n):
+    for seed in range(seed0, seed0 + n):
         w = generate(seed)
         ws = w.materialize(RUNS / w.task_id / "ws")
         pre = w.check(ws)
@@ -139,9 +151,12 @@ def _pace(window: deque, expected: int = EXPECTED_PER_INSTANCE) -> float:
 
 
 def run(model: str, template: str, budget: int, timeout: int, lean: bool = False,
-        n: int = N) -> None:
-    manifest = prepare(n)
-    writer = TraceWriter("007_screen")
+        n: int = N, seed0: int = SEED0) -> None:
+    manifest = prepare(n, seed0)
+    # Held-out runs get their own trace stem: TraceWriter is append-only, and mixing a
+    # validation run into the tuning run's trace would make the two indistinguishable
+    # afterwards, which is the whole point of holding seeds out.
+    writer = TraceWriter("007_screen" if seed0 == SEED0 else f"007_screen_{seed0}")
     spent = 0
     rows = []
     window: deque = deque()
@@ -263,8 +278,8 @@ def _wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
     return (max(0.0, c - h), min(1.0, c + h))
 
 
-def report() -> None:
-    path = RUNS / "screen.json"
+def report(seed0: int = SEED0) -> None:
+    path = _runs_dir(seed0) / "screen.json"
     if not path.exists():
         sys.exit(f"no screen at {path} -- run it first")
     rows = json.loads(path.read_text())
@@ -283,15 +298,18 @@ def main() -> None:
     r.add_argument("--template", default="gemini.template.json")
     r.add_argument("--budget", type=int, default=DEFAULT_BUDGET)
     r.add_argument("--timeout", type=int, default=360)
-    r.add_argument("--n", type=int, default=N, help="instances (seeds 700+)")
+    r.add_argument("--n", type=int, default=N, help="instances")
+    r.add_argument("--seed0", type=int, default=SEED0,
+                   help="first seed; 720 is the held-out set reserved by run 4")
     r.add_argument("--lean", action="store_true",
                    help="reduced tool surface; only needed on a TPM-starved backend")
-    sub.add_parser("report")
+    rp = sub.add_parser("report")
+    rp.add_argument("--seed0", type=int, default=SEED0)
     a = p.parse_args()
     if a.cmd == "run":
-        run(a.model, a.template, a.budget, a.timeout, a.lean, a.n)
+        run(a.model, a.template, a.budget, a.timeout, a.lean, a.n, a.seed0)
     else:
-        report()
+        report(a.seed0)
 
 
 if __name__ == "__main__":

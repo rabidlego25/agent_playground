@@ -237,3 +237,48 @@ Four of five failures were `untouched`: the agent wrote probe tests and never ed
 module. Only one instance edited and still failed. That failure mode is worth carrying into
 the main run as its own column, since it is exactly the kind of thing a Planner/Coder split
 might change — and it is the tool-using analogue of the `format_ok` distinction 001 needed.
+
+
+---
+
+# Run 5 — held-out validation, seeds 720–739 (2026-09-11)
+
+**Written before the run.** Run 4 chose `MULTI_EDIT_RATE = 0.2` using the same n=20 that
+produced the 1-edit/2-edit split, so its 0.64 is a prediction fitted on its own data. Seeds
+720–739 were reserved for exactly this check and have never been run.
+
+## The prediction, committed before any request
+
+Run 4 measured 1-edit **0.55** (6/11) and 2-edit **1.00** (9/9). The held-out draw is
+generated and inspected locally — free, no API — and its realised mixture is **13 one-edit,
+7 two-edit**, not the nominal 20%:
+
+| | design-level | this draw |
+|---|---|---|
+| 2-edit share | 0.20 | 0.35 |
+| predicted pass rate | 0.64 | **0.71** |
+| predicted passes / 20 | 12.8 | **14.2** |
+
+**The number to judge is 0.71**, because it conditions on the mixture that will actually be
+run. 0.64 is what the rate implies in expectation over draws and is not what these 20 seeds
+are. Recording both, so neither can be chosen after the fact.
+
+- **Validated** if the clean rate lands in 0.60–0.85 — off the ceiling, inside the band the
+  amended design needs, and consistent with the split run 4 measured.
+- **Run 4's split does not transfer** if the rate lands above 0.85 (back to a ceiling) or
+  below 0.55. Either way `MULTI_EDIT_RATE` was tuned on noise and the pool needs a different
+  lever.
+- Wilson95 on n=20 is roughly ±0.20, so this cannot resolve 0.64 from 0.71. It can resolve
+  *ceiling* from *fundable*, which is the decision the pool needs to support.
+
+Secondary, and the reason run 4 flagged it: **`untouched` vs `edited, still failing`.** Run 4
+had 4 untouched of 5 failures. If that ratio holds, the dominant arm A failure mode is an
+agent that probes with `test_*.py` and never edits — carried into the main run as its own
+column.
+
+## Budget
+
+~240 requests at ~12 calls/instance. Run 4 spent 232 earlier the same Pacific day against a
+500 RPD cap, so this sweep is capped at 260 and may stop short; a partial n is reported as
+partial rather than topped up from a second day's quota, since instances would then differ in
+nothing that matters but would no longer be one draw.
