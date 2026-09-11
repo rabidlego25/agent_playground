@@ -29,6 +29,25 @@ Running list. Add freely; mark ones that become experiments with their experimen
 - Is there a benchmark for *knowing when to stop*? Over-eagerness and premature handoff are the two failure
   modes most visible in practice and least represented in scores.
 
+## Task and benchmark design (2026-09-11)
+
+- ~~Harden a repair pool by making defects span more edits.~~ **Wrong knob, measured in 007:**
+  multi-edit defects are *easier* (9/9 vs 6/11 for single-edit, Fisher p=0.0298). The agent writes
+  its own probe tests, so a defect that breaks more behaviour is found on the first probe while a
+  quiet one-line error survives. **Difficulty is set by detectability under the agent's own
+  testing, not by the size of the fix.** See
+  [`2026-09-11-defect-detectability-not-edit-count.md`](2026-09-11-defect-detectability-not-edit-count.md).
+- Following from that: can detectability be *estimated* without a run — by generating plausible
+  ad-hoc tests and measuring whether they cover the broken case? That would make difficulty a
+  designable property instead of a measured one.
+- The count of hidden cases a mutant breaks (`discriminating`) does **not** predict pass/fail.
+  What matters is whether the agent's *own* tests cover the broken case, which is a harder thing
+  to measure and the more interesting one.
+- **[007]** A multi-agent scaffold advertised as general may be a scripted pipeline for one task
+  family. Before using any as a treatment, check: does delegation fire without a named workflow?
+  Is the inter-agent tool mentioned in any shipped prompt? Does the shipped config even load on
+  the current runtime? All three failed silently for `openclaw-agents`.
+
 ## Notes and memory as experimental objects
 - Does handoff-note *format* change downstream agent accuracy? Fix a task, have A write a note under
   format F, have B continue from the note alone, sweep F. See `2026-08-29-benchmark-vs-instrument.md`.
@@ -102,20 +121,32 @@ Open:
   "adopted a peer", and it is much higher — mistral 73% (+0.082), llama 79% (−0.015), qwen 49%
   (−0.123). The ordering of *gain* held; the adoption rates are a different metric and should not
   be read against 003's without recomputing one from the other's traces.
-- **[005 opens, and it is the sharpest one left]** Does deliberation harm scale with the
-  *competence gap* between a member and its peers? qwen2.5 lost nothing deliberating against
-  its own family at the same prompt (004: net exactly 0) and −0.123 against peers 0.43 below it
-  (005). Two points, and the second also changes family, so "harm tracks the gap" and "harm
-  tracks family mismatch" are not yet separated. Cheap to settle: `004_samples.jsonl` holds
-  seven independent qwen draws per task, so peer blocks at intermediate gaps can be assembled
-  from traces already on disk and only qwen's revision calls are new (~95 min).
-- ~~Where is the Condorcet threshold once every member is prompted at its ceiling rather than
-  0.21 below it?~~ **[005] Answered 2026-09-01: the panel does not clear it, and prompting made
-  it worse.** The members did not move comparably — qwen2.5 +0.154, mistral +0.108, llama3.1
-  −0.026 — so the panel went from 0.51/0.22/0.18 to 0.67/0.19/0.29 and the vote lost to its best
-  member by 0.09 (p=0.0001) against 003's 0.08. Cross-family `c` fell to 0.211, the most
-  independent errors measured in this repo, and it bought nothing: **competence is the binding
-  constraint, not independence.**
+- ~~**[005 opens, and it is the sharpest one left]** Does deliberation harm scale with the
+  *competence gap* between a member and its peers?~~ **[008] Answered 2026-09-11: it tracks the
+  gap, not family mismatch — but the gap is not the cause.** Holding family, prompt, weights and
+  temperature fixed and moving only peer accuracy (peers are qwen's own scored draws from
+  `004_samples.jsonl`), qwen's delta goes +0.065 at gap 0.00 to **−0.360** at gap −0.47, McNemar
+  68/9, p<1e−6. 005's cross-family −0.123 at a comparable gap is 2.9× milder, so family mismatch
+  needs no separate explanation. **The decomposition replaces the question:** bucketed by how many
+  peers were correct, the delta is identical in both conditions — 0 correct ≈ −0.44, 1 correct
+  ≈ −0.04, 2 correct ≈ +0.27 — and only the shares move (0-correct 10% → 81%). Competence acts
+  only through P(zero correct peers). See
+  [`2026-09-11-one-correct-peer-is-enough.md`](2026-09-11-one-correct-peer-is-enough.md).
+
+- **[008 opens, and it is now the sharpest one]** If one correct peer is enough, the composition
+  statistic that matters is **max(member accuracy), not mean** — a different quantity from the
+  Condorcet threshold 003 and 005 were built around. It predicts a 1-strong/2-weak panel is safe
+  where three uniformly mediocre members are not, and that adding a weak member to a strong pair
+  costs nothing. Directly testable with the same peer-block machinery: hold the block size fixed
+  and vary whether the *best* peer is correct, independently of the mean.
+- **[008 opens]** Is the step at 1 correct peer, or is it "at least one peer agrees with the
+  subject's own answer"? 008 cannot separate them — a correct peer usually agrees with a correct
+  subject. Constructing blocks where a peer is wrong *but* matches the subject's wrong answer
+  would split the two, and it is assemblable from draws already on disk.
+- **[008 opens]** Peers in 008 are weak *samples* of a competent model, not a weaker model. Do
+  genuinely weaker models err in a way that changes the step function, or only its frequency?
+  005's traces hold llama and mistral draws for exactly this comparison.
+
 - **[004] partly retired:** "a composition where the strong side is not outvoted would capture
   the capability transfer" assumes there is transfer to capture. On the reasoning prompt there
   is none — deliberation produced 97 wrong→right against 97 right→wrong, net exactly zero,
