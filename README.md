@@ -21,6 +21,7 @@ stated hypothesis and a trace someone else could re-analyze.
 | 007 | Does role-specialised inter-agent routing beat one well-prompted agent, on a tool-using task? | **arm B parked**; harness, world and pool complete | Prediction committed before any run: **C > A > B**. Never tested — **the chosen add-on runs as a single agent on a repair task** (1 of 9 agents active, 0 inter-agent messages): its delegation is triggered by named research-paper workflows and none fits code repair, so arm B could only deliberate if we wrote the treatment ourselves. Produced four findings without its main comparison — free-tier quota mechanics, two trace-schema corrections that would have silently faked H2, and defect detectability. [README](experiments/007-openclaw-role-routing/README.md) · [PILOT](experiments/007-openclaw-role-routing/PILOT.md) · [SCREEN](experiments/007-openclaw-role-routing/SCREEN.md) · [ARM-B](experiments/007-openclaw-role-routing/ARM-B-PILOT.md) |
 | 008 | Does deliberation harm track the competence gap, or family mismatch? | complete | **The gap, and 005 needs no family explanation** — delta runs +0.180 / +0.101 / +0.065 / −0.115 / **−0.360** as peer accuracy falls 1.00 → 0.15 (H1 monotone, H2 and H3 both confirmed), where 005's cross-family −0.123 at a comparable gap is 2.9× milder. **But the gap is not the cause.** Bucketed by how many peers were correct, the delta is identical in all five conditions (0 → −0.45, 1 → −0.01, 2 → +0.20) and only the *shares* move (0-correct 0% → 81%); those three constants reproduce every condition's aggregate to within the 0.050 noise floor. **One correct peer is enough to stop the damage.** [README](experiments/008-competence-gap/README.md) |
 | 009 | Is deliberation harm set by P(no correct peer), or by mean peer competence? | complete | **Neither — it tracks the *fraction* of peers that are correct.** Three peers instead of two breaks 008's count model exactly where count and fraction separate: k=1 is −0.132 here against −0.011 in 008 (n=234). Sorted by fraction the two experiments form one monotone curve that predicts all **eight** conditions leave-one-out with max residual **0.034**. **Refutes 008's "max, not mean"**: at identical max, raising mean 0.33→0.67 is worth **+0.209** (p=0.0002). [README](experiments/009-panel-composition/README.md) |
+| 010 | Can the deliberation curve be used at runtime, or only described? | complete | **Usable, via a different observable.** Always-deliberate is −0.040; **deliberate only when every peer disagrees with you** is +0.061, a **+0.101** gain, firing on 28%. Held out on two prompts: +0.108, +0.095. Mechanism: deliberation is +0.481 when the agent was already wrong and **−0.287** when it was right, and P(wrong | all peers agree) = **0.032**. Zero new model calls. [README](experiments/010-gating/README.md) |
 
 Keep this table current. A repo of fifty experiments with no index is write-only — you re-run what
 you already answered.
@@ -54,7 +55,7 @@ results/       raw run artifacts, append-only
 
 Updated 2026-09-11. The shared harness (`lib/trace.py`, `lib/tasks.py`, `lib/models.py`) and the
 instrument probes in `tests/` are in place and calibrated (`reports/2026-08-30-calibration.pdf`:
-task-set variance 0.163, run-to-run 0.050). 001, 003, 004, 005, 006, 008 and 009 are complete; 002 is
+task-set variance 0.163, run-to-run 0.050). 001, 003, 004, 005, 006, 008, 009 and 010 are complete; 002 is
 designed and unrun; 007's arm B is parked after its scaffold turned out not to be one.
 
 The harness gained its first multi-step world on 2026-09-10: `lib/worlds/repair.py` generates a
@@ -136,12 +137,25 @@ statistic**: holding max at 1.00 and moving mean peer accuracy 0.33 → 0.67 is 
 (p=0.0002). "One correct peer is enough" was an artifact of measuring pairs. See
 `notes/2026-09-11-fraction-not-count.md`.
 
-Next: **the fraction rule needs a pre-registered test at a block size neither experiment
-used.** It was found post hoc after 009's H3 failed, and although it survives
-leave-one-out across eight conditions, 2 and 3 peers cannot separate "fraction correct" from
-"margin of correct over wrong" — every cell orders the same way under both. A 5-peer
-condition splits them. The 0.102 gap between 006's 0.979 oracle ceiling and its 0.877 vote is
-still the largest thing on the table, and it is a selection problem rather than a sampling
+010 then asked whether any of the deliberation work is usable, and answered it from traces
+already on disk — 1,170 measured instances, zero new model calls. **It is, but not through the
+variable 008 and 009 pointed at.** The fraction of correct peers is unobservable at runtime;
+peer *disagreement* is free, and it is what matters: deliberation is worth **+0.481** when the
+agent was already wrong and **−0.287** when it was already right, where it is capped at zero
+and can only take a correct answer away. P(wrong | every peer agrees with me) is **0.032**. So
+gating on "every peer disagrees with me" turns always-deliberate's −0.040 into **+0.061**, a
++0.101 gain, and it holds on both prompts without fitting (+0.108, +0.095).
+
+That reframes 008 and 009 rather than overturning them: they fixed the subject's answer and
+selected peers independently of it, so their curve is the causal effect of composition. In a
+real panel, peers and subject are the same model on the same task, so the fraction-correct
+curve is substantially a proxy for "is the subject wrong". See
+`notes/2026-09-11-deliberate-only-when-peers-disagree.md`.
+
+Next: **007's ladder is built and unrun**, waiting on free-tier quota, and it is the only
+thread that tests role specialisation rather than deliberation. The 0.102 gap between 006's
+0.979 oracle ceiling and its 0.877 vote is still the largest thing on the table, and it is a
+selection problem rather than a sampling one.
 one.
 002 is designed and unrun. 005 still owes a pre-registered llama3.1 re-run at max_tokens=1600.
 007's repair world, oracle, sandbox, exporter and calibrated pool all survive its arm B and are

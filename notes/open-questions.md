@@ -147,6 +147,19 @@ Open:
   all five of its conditions used two peers. One curve fits both experiments, eight
   conditions, leave-one-out max residual 0.034. See
   [`2026-09-11-fraction-not-count.md`](2026-09-11-fraction-not-count.md).
+- **[010] The deliberation line has a deployable rule, 2026-09-11.** Deliberate only when
+  every peer disagrees with you: +0.101 over always-deliberate, held out on two prompts. It
+  works because deliberation is +0.481 when the agent was wrong and −0.287 when it was right,
+  and P(wrong | all peers agree) = 0.032. See
+  [`2026-09-11-deliberate-only-when-peers-disagree.md`](2026-09-11-deliberate-only-when-peers-disagree.md).
+- **[010 opens]** Agreement predicts correctness because wrong answers are diverse and right
+  ones concentrate — it survives even in 008/009's selected blocks (AUC 0.810), so it is not
+  task-difficulty clustering. That predicts the signal **weakens on tasks with few plausible
+  wrong answers**: binary or small-label tasks should break the gate. Directly testable and
+  untested.
+- **[010 opens]** At larger blocks, is the right cut unanimity or a proportion? Two peers
+  cannot say. The 5-peer condition 009 wanted would answer this and the fraction-vs-margin
+  question in one run.
 - **[009 opens, and it is now the sharpest one]** Fraction correct and *margin* (correct
   minus wrong) order every cell in 008 and 009 identically, so neither experiment can
   separate them. A 5-peer block does: fraction 2/5 and margin −1 pull apart. The fraction
