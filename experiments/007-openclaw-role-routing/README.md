@@ -1,7 +1,11 @@
 # 007 — Does role-specialised inter-agent routing beat one well-prompted agent?
 
-**Status:** pre-registered; harness verified; backend chosen and screened; **blocked on the
-task pool, not the backend.** **Created:** 2026-09-10. **Prediction committed in this file before any run**, and no run has been taken
+**Status:** pre-registered; harness verified; backend chosen; pool calibrated to 0.75.
+**Arm B pilot 2026-09-11 (`ARM-B-PILOT.md`): the chosen add-on cannot serve as arm B on a
+repair task — it ran as one agent, 0 inter-agent messages, because its delegation is
+triggered by named research-paper workflows and no repair-shaped workflow exists. H1 is
+not testable against this scaffold without authoring the treatment ourselves. Awaiting a
+decision on scaffold vs. task family.** **Created:** 2026-09-10. **Prediction committed in this file before any run**, and no run has been taken
 against it. The pilot of 2026-09-10 (`PILOT.md`) wired OpenClaw 2026.9.3 end to end and then
 found that the Groq free tier's 8,000 TPM cap makes the comparison unattributable: arm B would
 hit rate limits far more often than arm A, so its predicted loss could not be read as
