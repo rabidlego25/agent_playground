@@ -282,3 +282,62 @@ column.
 500 RPD cap, so this sweep is capped at 260 and may stop short; a partial n is reported as
 partial rather than topped up from a second day's quota, since instances would then differ in
 nothing that matters but would no longer be one draw.
+
+## Result — the prediction failed, and the pool was never hardened
+
+```
+raw / clean   19/20 = 0.95   Wilson95 [0.76, 0.99]
+rate-limited  0/20           219 requests
+predicted     0.71 (14.2/20) committed above, before the run
+-> CEILING (>0.85)
+```
+
+**Predicted 14 passes, got 19.** Against the bands committed above this is the "run 4's split
+does not transfer" branch: `MULTI_EDIT_RATE` was tuned on noise.
+
+The 1-edit rate is where it breaks, and it is the comparison run 4's whole story rested on:
+
+| | run 4 (700–719) | run 5 (720–739) |
+|---|---|---|
+| 1-edit | 6/11 = **0.55** | 12/13 = **0.92** |
+| 2-edit | 9/9 = 1.00 | 7/7 = 1.00 |
+| overall | 15/20 = 0.75 | 19/20 = 0.95 |
+
+Fisher two-sided: overall p=0.182, 1-edit p=0.061. Run 5 shows **no 1-edit/2-edit gap at all**
+(12/13 vs 7/7). The p=0.0298 that justified cutting the rate to 0.2 did not reproduce, and
+`notes/2026-09-11-defect-detectability-not-edit-count.md` is retracted at the head.
+
+**Confound, stated because it limits what can be concluded.** Run 4 ran at
+`MULTI_EDIT_RATE=0.6` and run 5 at 0.2. That parameter is consumed from the same RNG stream
+that picks the operator, so the 1-edit draws in the two runs are not the same population —
+this is not a pure seed replication. What *is* clean is the headline: 0.95 is the held-out
+measurement of the configuration as it currently ships.
+
+## The four screens are all one number
+
+| run | n | rate |
+|---|---|---|
+| 1 | 7 | 1.00 |
+| 3 | 10 | 0.90 |
+| 4 | 20 | 0.75 |
+| 5 | 20 | 0.95 |
+
+Pooled **50/57 = 0.88**, and every run is inside binomial noise of it (run 4, the outlier, at
+p≈0.06). Nothing done to the pool across four rounds of "hardening" has moved arm A off ~0.9.
+Run 4 read a low draw as a hardening effect and shipped a parameter change on it; run 3 read
+1.00 → 0.90 the same way. **n=20 cannot resolve 0.75 from 0.95** — the Wilson intervals
+[0.53, 0.89] and [0.76, 0.99] overlap across most of their range — so no screen at this n can
+tune a difficulty knob, only detect a floor.
+
+## Consequence for the design
+
+Arm A at ~0.9 leaves 0.1 of headroom, so **the C>A leg is unreachable at any n the budget
+allows** — the point run 3 already made, now with the pool "hardened" twice since. The lever
+has to change the task, not its parameters: a longer dependency chain, a defect whose
+specification is ambiguous without reading the hidden cases, or an oracle the agent's own
+probing cannot approximate. Picking one on a 20-instance screen is what produced this, so the
+next calibration needs n≥60 or a decision rule that does not depend on separating 0.75 from
+0.95.
+
+The harness itself is fine: 0/20 rate-limited for a third consecutive run, 219 requests,
+13–18s per instance. Nothing here is a backend problem.

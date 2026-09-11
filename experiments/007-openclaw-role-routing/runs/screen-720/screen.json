@@ -1,0 +1,222 @@
+[
+  {
+    "task_id": "repair-pathgrid-720",
+    "seed": 720,
+    "passed": true,
+    "edited": true,
+    "calls": 11,
+    "quota_tokens": 242283,
+    "rc": 0,
+    "wall_s": 20.4,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-intervals-721",
+    "seed": 721,
+    "passed": true,
+    "edited": true,
+    "calls": 12,
+    "quota_tokens": 243581,
+    "rc": 1,
+    "wall_s": 17.7,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-pathgrid-722",
+    "seed": 722,
+    "passed": true,
+    "edited": true,
+    "calls": 12,
+    "quota_tokens": 242355,
+    "rc": 1,
+    "wall_s": 17.7,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-pathgrid-723",
+    "seed": 723,
+    "passed": true,
+    "edited": true,
+    "calls": 8,
+    "quota_tokens": 175392,
+    "rc": 0,
+    "wall_s": 13.2,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-pathgrid-724",
+    "seed": 724,
+    "passed": true,
+    "edited": true,
+    "calls": 11,
+    "quota_tokens": 242837,
+    "rc": 0,
+    "wall_s": 16.5,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-intervals-725",
+    "seed": 725,
+    "passed": true,
+    "edited": true,
+    "calls": 9,
+    "quota_tokens": 197351,
+    "rc": 0,
+    "wall_s": 16.6,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-ledger-726",
+    "seed": 726,
+    "passed": false,
+    "edited": false,
+    "calls": 18,
+    "quota_tokens": 419626,
+    "rc": 0,
+    "wall_s": 33.3,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-pathgrid-727",
+    "seed": 727,
+    "passed": true,
+    "edited": true,
+    "calls": 10,
+    "quota_tokens": 218863,
+    "rc": 0,
+    "wall_s": 15.5,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-intervals-728",
+    "seed": 728,
+    "passed": true,
+    "edited": true,
+    "calls": 9,
+    "quota_tokens": 199769,
+    "rc": 0,
+    "wall_s": 15.5,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-pathgrid-729",
+    "seed": 729,
+    "passed": true,
+    "edited": true,
+    "calls": 11,
+    "quota_tokens": 242491,
+    "rc": 0,
+    "wall_s": 16.3,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-ledger-730",
+    "seed": 730,
+    "passed": true,
+    "edited": true,
+    "calls": 12,
+    "quota_tokens": 243199,
+    "rc": 1,
+    "wall_s": 17.7,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-pathgrid-731",
+    "seed": 731,
+    "passed": true,
+    "edited": true,
+    "calls": 12,
+    "quota_tokens": 240892,
+    "rc": 1,
+    "wall_s": 17.4,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-pathgrid-732",
+    "seed": 732,
+    "passed": true,
+    "edited": true,
+    "calls": 8,
+    "quota_tokens": 176126,
+    "rc": 0,
+    "wall_s": 13.3,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-ledger-733",
+    "seed": 733,
+    "passed": true,
+    "edited": true,
+    "calls": 9,
+    "quota_tokens": 195466,
+    "rc": 0,
+    "wall_s": 15.1,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-pathgrid-734",
+    "seed": 734,
+    "passed": true,
+    "edited": true,
+    "calls": 12,
+    "quota_tokens": 263967,
+    "rc": 0,
+    "wall_s": 87.1,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-ledger-735",
+    "seed": 735,
+    "passed": true,
+    "edited": true,
+    "calls": 10,
+    "quota_tokens": 218326,
+    "rc": 0,
+    "wall_s": 15.5,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-ledger-736",
+    "seed": 736,
+    "passed": true,
+    "edited": true,
+    "calls": 14,
+    "quota_tokens": 306756,
+    "rc": 0,
+    "wall_s": 145.2,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-intervals-737",
+    "seed": 737,
+    "passed": true,
+    "edited": true,
+    "calls": 9,
+    "quota_tokens": 195882,
+    "rc": 0,
+    "wall_s": 14.4,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-intervals-738",
+    "seed": 738,
+    "passed": true,
+    "edited": true,
+    "calls": 12,
+    "quota_tokens": 241346,
+    "rc": 1,
+    "wall_s": 17.4,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-intervals-739",
+    "seed": 739,
+    "passed": true,
+    "edited": true,
+    "calls": 10,
+    "quota_tokens": 225441,
+    "rc": 0,
+    "wall_s": 16.9,
+    "rate_limited": null
+  }
+]

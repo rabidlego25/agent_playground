@@ -1,5 +1,12 @@
 # Repair difficulty is set by detectability, not by how much code the fix touches
 
+> **Retracted 2026-09-11, same day, by the held-out check this note's own experiment
+> reserved.** Seeds 720–739 gave 1-edit **12/13 = 0.92** against the 6/11 = 0.55 below, and
+> no 1-edit/2-edit gap at all (12/13 vs 7/7). The contrast this note is built on did not
+> reproduce. The mechanism it proposes may still be right — the failures really do leave
+> probe tests behind, in both runs — but **nothing here is evidence for it.** Left in place
+> unedited because the reasoning is the useful part of the record. See `SCREEN.md` run 5.
+
 **2026-09-11.** Measured while calibrating `lib/worlds/repair.py` for 007. n=20, arm A on
 Gemini 3.5 Flash Lite, full tool surface, 0/20 rate-limited.
 
