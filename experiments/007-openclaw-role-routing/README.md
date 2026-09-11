@@ -225,6 +225,30 @@ The runtime has `read/exec/edit/write` core tools and can drive a browser and se
 
 ## Known weaknesses, stated in advance
 
+- **Arm B as shipped cannot do a shared-file repair task at all.** Read out of the cloned
+  add-on 2026-09-11, not from its README. `setup.sh:162` pins every sub-agent to its own
+  private workspace:
+
+      openclaw agents add ${id} --workspace ${OPENCLAW_HOME}/workspace-${id}
+
+  Only `main` sits at the cwd we pass. So Planner, Critic, Coder and the rest **cannot read
+  or edit `/work`**. Arm B does not degrade to a worse panel; it degrades to *main working
+  alone while eight agents who cannot see the code offer advice*. If that loses, the
+  explanation is trivial and has nothing to do with deliberation.
+
+  That topology is coherent for the workflow the add-on was built for — each role produces
+  its own artefact (a survey, a draft, a review) and they exchange text. It is incoherent
+  for a task whose whole content is a shared file.
+
+  Minimal fix: point every agent's workspace at the task workspace. One field, and it makes
+  the comparison test what 007 says it tests. It is still a **deviation from "installed as
+  shipped"**, which was the reason this add-on was chosen, and must be reported as one.
+
+- **The shipped prompts are ~25% Chinese** (12,650 CJK characters across the agent
+  prompts; every `soul.md` identity block is Chinese) while the task statement and the
+  codebase are English. Part of the treatment, reported verbatim, and another reason an
+  arm B loss would have a cheaper explanation than deliberation.
+
 - **The nine roles are built for a different task family, and this is now the sharpest
   threat to H1.** Confirmed 2026-09-11 by reading the add-on rather than the summary of
   it: the roles are Planner, Ideator, Critic, Surveyor (*literature research*), Coder,
