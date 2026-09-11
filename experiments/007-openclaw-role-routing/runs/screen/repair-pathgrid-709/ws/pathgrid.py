@@ -15,7 +15,7 @@ def steps(grid, start, goal):
             return False
         return grid[r][c] != WALL
 
-    if not open_cell(goal):
+    if not open_cell(start) or not open_cell(goal):
         return -1
     seen = {start}
     queue = deque([(start, 0)])
@@ -24,6 +24,12 @@ def steps(grid, start, goal):
         if (r, c) == goal:
             return dist
         for dr, dc in DELTAS:
+            # If diagonal movement, can we cut corners?
+            # Standard grid movement with diagonals: to move diagonally from (r, c) to (r + dr, c + dc),
+            # both intermediate orthogonal cells (r + dr, c) and (r, c + dc) must be open to avoid clipping walls.
+            if dr != 0 and dc != 0:
+                if not open_cell((r + dr, c)) or not open_cell((r, c + dc)):
+                    continue
             nxt = (r + dr, c + dc)
             if nxt not in seen and open_cell(nxt):
                 seen.add(nxt)

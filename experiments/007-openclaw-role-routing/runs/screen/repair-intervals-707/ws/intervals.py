@@ -8,7 +8,8 @@ def merge(spans):
     out = [list(ordered[0])]
     for start, end in ordered[1:]:
         if start < out[-1][1]:
-            out[-1][1] = end
+            if end > out[-1][1]:
+                out[-1][1] = end
         else:
             out.append([start, end])
     return [tuple(s) for s in out]

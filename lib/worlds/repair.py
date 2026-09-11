@@ -71,10 +71,20 @@ MIN_VISIBLE = 2
 MIN_DISCRIMINATING = 1
 N_CANDIDATES = 26
 
-# Fraction of seeds that prefer a defect spanning several edits. Raised from an implicit
-# 0 after 007's screen put arm A at 0.90 on single-line mutations (SCREEN.md): a one-line
-# fix is findable once the specification is read, so the pool could not separate arms.
-MULTI_EDIT_RATE = 0.6
+# Fraction of seeds that prefer a defect spanning several edits.
+#
+# Raised to 0.6 on 2026-09-11 to harden the pool, then cut to 0.2 the same day when the
+# measurement came back the other way round: multi-edit defects are *easier*, 9/9 against
+# 6/11 for single-edit, Fisher one-sided p=0.0298 at n=20. A defect spanning two edits
+# breaks more behaviour in more places, so the agent's own probe tests find it on the first
+# try, while a quiet one-line error survives that probing. Difficulty is set by
+# detectability under the agent's own testing, not by the size of the fix. See
+# notes/2026-09-11-defect-detectability-not-edit-count.md.
+#
+# 0.2 mixes the sub-pools to a predicted 0.2*1.00 + 0.8*0.55 = 0.64, inside the 0.60-0.70
+# band 007 needs. That prediction comes from the same n=20 that produced the finding and
+# is unvalidated on held-out seeds.
+MULTI_EDIT_RATE = 0.2
 
 
 @dataclass

@@ -1,0 +1,222 @@
+[
+  {
+    "task_id": "repair-intervals-700",
+    "seed": 700,
+    "passed": true,
+    "edited": true,
+    "calls": 10,
+    "quota_tokens": 217821,
+    "rc": 0,
+    "wall_s": 19.5,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-pathgrid-701",
+    "seed": 701,
+    "passed": true,
+    "edited": true,
+    "calls": 10,
+    "quota_tokens": 219006,
+    "rc": 0,
+    "wall_s": 17.7,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-intervals-702",
+    "seed": 702,
+    "passed": true,
+    "edited": true,
+    "calls": 10,
+    "quota_tokens": 217950,
+    "rc": 0,
+    "wall_s": 16.3,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-intervals-703",
+    "seed": 703,
+    "passed": true,
+    "edited": true,
+    "calls": 11,
+    "quota_tokens": 242426,
+    "rc": 0,
+    "wall_s": 19.1,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-pathgrid-704",
+    "seed": 704,
+    "passed": true,
+    "edited": true,
+    "calls": 12,
+    "quota_tokens": 242018,
+    "rc": 1,
+    "wall_s": 20.3,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-ledger-705",
+    "seed": 705,
+    "passed": true,
+    "edited": true,
+    "calls": 11,
+    "quota_tokens": 244677,
+    "rc": 0,
+    "wall_s": 17.5,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-pathgrid-706",
+    "seed": 706,
+    "passed": true,
+    "edited": true,
+    "calls": 11,
+    "quota_tokens": 241113,
+    "rc": 0,
+    "wall_s": 16.4,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-intervals-707",
+    "seed": 707,
+    "passed": true,
+    "edited": true,
+    "calls": 12,
+    "quota_tokens": 240218,
+    "rc": 1,
+    "wall_s": 18.0,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-intervals-708",
+    "seed": 708,
+    "passed": false,
+    "edited": false,
+    "calls": 12,
+    "quota_tokens": 247945,
+    "rc": 1,
+    "wall_s": 22.9,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-pathgrid-709",
+    "seed": 709,
+    "passed": false,
+    "edited": true,
+    "calls": 17,
+    "quota_tokens": 360962,
+    "rc": 1,
+    "wall_s": 25.3,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-ledger-710",
+    "seed": 710,
+    "passed": true,
+    "edited": true,
+    "calls": 12,
+    "quota_tokens": 242197,
+    "rc": 1,
+    "wall_s": 19.8,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-pathgrid-711",
+    "seed": 711,
+    "passed": false,
+    "edited": false,
+    "calls": 12,
+    "quota_tokens": 246355,
+    "rc": 1,
+    "wall_s": 19.1,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-ledger-712",
+    "seed": 712,
+    "passed": true,
+    "edited": true,
+    "calls": 12,
+    "quota_tokens": 244759,
+    "rc": 1,
+    "wall_s": 22.1,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-ledger-713",
+    "seed": 713,
+    "passed": true,
+    "edited": true,
+    "calls": 12,
+    "quota_tokens": 248697,
+    "rc": 1,
+    "wall_s": 22.1,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-intervals-714",
+    "seed": 714,
+    "passed": true,
+    "edited": true,
+    "calls": 9,
+    "quota_tokens": 197905,
+    "rc": 0,
+    "wall_s": 16.0,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-pathgrid-715",
+    "seed": 715,
+    "passed": true,
+    "edited": true,
+    "calls": 12,
+    "quota_tokens": 245049,
+    "rc": 1,
+    "wall_s": 18.9,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-intervals-716",
+    "seed": 716,
+    "passed": true,
+    "edited": true,
+    "calls": 11,
+    "quota_tokens": 244046,
+    "rc": 0,
+    "wall_s": 18.7,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-intervals-717",
+    "seed": 717,
+    "passed": false,
+    "edited": false,
+    "calls": 12,
+    "quota_tokens": 243528,
+    "rc": 1,
+    "wall_s": 19.2,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-ledger-718",
+    "seed": 718,
+    "passed": false,
+    "edited": false,
+    "calls": 12,
+    "quota_tokens": 246359,
+    "rc": 1,
+    "wall_s": 22.6,
+    "rate_limited": null
+  },
+  {
+    "task_id": "repair-ledger-719",
+    "seed": 719,
+    "passed": true,
+    "edited": true,
+    "calls": 12,
+    "quota_tokens": 239598,
+    "rc": 1,
+    "wall_s": 17.2,
+    "rate_limited": null
+  }
+]

@@ -10,12 +10,12 @@ def apply(opening, txns):
         if kind == "credit":
             balance += amount
         elif kind == "debit":
-            if opening - amount < FLOOR:
+            if balance - amount < FLOOR:
                 rejected += 1
                 continue
             balance -= amount
         elif kind == "fee":
-            if balance - amount < -500:
+            if balance - amount < FLOOR:
                 rejected += 1
                 continue
             balance -= amount

@@ -11,10 +11,11 @@ def apply(opening, txns):
             balance += amount
         elif kind == "debit":
             if balance - amount < FLOOR:
+                rejected += 1
                 continue
             balance -= amount
         elif kind == "fee":
-            balance += amount
+            balance -= amount
         else:
             raise ValueError(kind)
     return balance, rejected

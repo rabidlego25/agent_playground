@@ -2,8 +2,9 @@
 
 > **Three runs, 2026-09-10.** Run 1 (12-cell pool) 7/7 clean = 1.00. Run 2 (parameterised
 > pool, broken pacer) 3/3 clean, 7 of 10 lost to 429s. Run 3 (parameterised pool, corrected
-> pacer) **9/10 = 0.90, 0 rate-limited**. Sections below are written against run 1 unless
-> marked; the run 3 additions are at the end.
+> pacer) **9/10 = 0.90, 0 rate-limited**. Run 4, 2026-09-11 (multi-edit defects, n=20)
+> **15/20 = 0.75, FUNDABLE** — and multi-edit defects turned out *easier*. Sections below
+> are written against run 1 unless marked; later runs are appended at the end.
 
 **Date:** 2026-09-10. **OpenClaw 2026.9.3**, image `openclaw-007`. Backend: Google AI Studio
 free tier, `gemini-3.5-flash-lite` via the OpenAI-compatibility endpoint. Arm A only, n=10,
@@ -181,3 +182,58 @@ So two things must both change before the main run, and they trade against each 
 n=160 × 3 arms × ~11 calls ≈ 5,300 requests ≈ 11 days of free-tier quota. That is the
 honest cost of a result 007 could publish, and it is a different design from the one
 pre-registered.
+
+
+---
+
+# Run 4 — multi-edit defects, n=20 (2026-09-11)
+
+```
+raw / clean   15/20 = 0.75   Wilson95 [0.53, 0.89]
+rate-limited  0/20           232 requests
+worked the task and got it wrong: 1
+-> FUNDABLE (0.25-0.85)
+```
+
+Arm A is off the ceiling and inside the band the amended design needs. The pacer held for a
+second run: 0/20 rate-limited, ~61s between instances, 217K–248K quota tokens each.
+
+## The hardening worked, for the opposite reason to the one intended
+
+| defect | passed |
+|---|---|
+| 1-edit | 6/11 = 0.55 |
+| 2-edit | **9/9 = 1.00** |
+
+Fisher exact, one-sided, **p = 0.0298**. Multi-edit defects are *easier*. The pool got
+harder only because raising `MULTI_EDIT_RATE` to 0.6 also pushed a lot of draws through
+operators that happened to be subtle — not because multi-edit is hard.
+
+They are genuinely multi-edit: generation reverts each edit in turn and rejects the operator
+unless the module still fails with any one undone, and the probe confirms it through the
+real oracle (74 partial fixes, 0 wrongly passed). They are real, and they are easier.
+
+**Mechanism.** All five failures left `test_*.py` behind — `test_more.py`,
+`test_comprehensive.py`, `test_bug.py`. The agent probes before fixing. A two-edit defect
+breaks more behaviour in more places and is found on the first probe; a quiet one-line error
+survives it. The four operators that failed every draw are all quiet and local:
+`covered-fencepost` (`end - start` → `end - start + 1` inside a sum), `no-count` (a counter
+that stops incrementing), `no-start-check` (a dropped guard), `off-grid` (`<` → `<=` in a
+bounds check).
+
+`discriminating` — how many hidden cases the mutant breaks — does *not* separate pass from
+fail either (failures 2–9, passes 6–9). What matters is whether the *agent's own* tests
+cover the broken case, not whether ours do.
+
+Written up in `notes/2026-09-11-defect-detectability-not-edit-count.md`.
+
+## Consequence
+
+`MULTI_EDIT_RATE` cut 0.6 → 0.2, predicting 0.2 × 1.00 + 0.8 × 0.55 = **0.64**, inside the
+0.60–0.70 target. That prediction is derived from the same n=20 that produced the finding,
+so it is a prediction and not a result — seeds 720–739 are held out to check it.
+
+Four of five failures were `untouched`: the agent wrote probe tests and never edited the
+module. Only one instance edited and still failed. That failure mode is worth carrying into
+the main run as its own column, since it is exactly the kind of thing a Planner/Coder split
+might change — and it is the tool-using analogue of the `format_ok` distinction 001 needed.

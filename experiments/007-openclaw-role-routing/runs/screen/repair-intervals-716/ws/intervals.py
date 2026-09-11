@@ -4,7 +4,7 @@
 def merge(spans):
     if not spans:
         return []
-    ordered = list(spans)
+    ordered = sorted(spans, key=lambda x: (x[0], x[1]))
     out = [list(ordered[0])]
     for start, end in ordered[1:]:
         if start < out[-1][1]:
@@ -15,4 +15,5 @@ def merge(spans):
 
 
 def covered(spans):
-    return sum(end - start for start, end in spans)
+    merged = merge(spans)
+    return sum(end - start for start, end in merged)

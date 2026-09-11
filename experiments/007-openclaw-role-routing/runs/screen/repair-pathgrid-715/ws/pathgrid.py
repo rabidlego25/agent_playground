@@ -13,9 +13,9 @@ def steps(grid, start, goal):
         r, c = rc
         if not (0 <= r < rows and 0 <= c < cols):
             return False
-        return True
+        return grid[r][c] != WALL
 
-    if not open_cell(goal):
+    if not open_cell(goal) or not open_cell(start):
         return -1
     seen = {start}
     queue = deque([(start, 0)])

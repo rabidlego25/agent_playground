@@ -27,5 +27,5 @@ def steps(grid, start, goal):
             nxt = (r + dr, c + dc)
             if nxt not in seen and open_cell(nxt):
                 seen.add(nxt)
-                queue.append((nxt, dist))
+                queue.append((nxt, dist + 1))
     return -1
