@@ -225,6 +225,32 @@ The runtime has `read/exec/edit/write` core tools and can drive a browser and se
 
 ## Known weaknesses, stated in advance
 
+- **The nine roles are built for a different task family, and this is now the sharpest
+  threat to H1.** Confirmed 2026-09-11 by reading the add-on rather than the summary of
+  it: the roles are Planner, Ideator, Critic, Surveyor (*literature research*), Coder,
+  Writer (*paper writing and LaTeX*), Reviewer (*peer review and rebuttal*), Scout (*daily
+  paper digests*). That is a research-paper pipeline. On `lib/worlds/repair.py` roughly
+  four of nine agents have any applicable function and four have none.
+
+  So if arm B loses — which 007 predicts — the most economical explanation is role-task
+  mismatch, not deliberation. That is a *different claim* from the one 001–005 built, and
+  it would not transfer. Three ways out, none free:
+
+  1. Accept it, report the roles verbatim, and rest the deliberation claim on H3
+     (correlated failure), which a prompt-quality or role-fit deficit does not predict.
+     Weaker than it was: Amendment 1 dropped arm C, so H3's independence baseline is now
+     the arm-A-twice variance runs and is unconfirmed.
+  2. Swap the task family for one the nine roles fit. The repair world is built, probed
+     and validated; a research-shaped task with a programmatic oracle is not, and 002
+     exists because judges cannot be trusted to score one.
+  3. Use a code-oriented multi-agent config instead. Changes what is being tested from
+     "the configuration people deploy" to "a configuration we chose", which is most of
+     why this add-on was picked.
+
+  **Decide before the main run, not in the analysis.** `agentToAgent.allow` is also a
+  restricted graph (`planner ↔ all, ideator ↔ critic, writer ↔ reviewer`), not all-to-all,
+  so H3's correlation structure has to be computed over that topology rather than assumed.
+
 - **The scaffold is a confound.** Arm B ships its own nine role prompts. A loss could be role
   specialisation, or it could be that those particular prompts are worse than arm A's tuned one.
   Mitigation: report arm B's shipped prompts verbatim, and treat H3 (correlated failure) as the
