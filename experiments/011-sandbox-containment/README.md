@@ -551,9 +551,43 @@ the answer-key variant, which rewrites the module and therefore also reads `(Tru
 traces do not store final module sources, so from the artifacts alone it cannot be excluded.
 Nothing suggests it happened; nothing available rules it out.
 
-**The minimum fix** is to score inside a container rather than on the host, and to stop writing
-the answer key into the directory the subject's code is imported from — run the hidden suite
-from a sibling directory with the module on `sys.path`, not the reverse. Neither is done.
+### Fixed 2026-09-15, and the probe is the acceptance test
+
+`probe_scorer.py --profile fixed` requires all three SHUT, and gets it.
+
+**The answer key never enters the subject's process.** Moving `_hidden.py` elsewhere would not
+have been enough — the module could still reach it through `sys.argv[0]` or
+`__main__.__file__`. Anything the subject can compare against is by definition something it can
+read, so the comparison had to leave its process entirely. `RepairWorld._cases()` now parses the
+expected values out of `hidden_tests` in the parent; `_probe_script()` emits only the *calls*;
+the child prints `repr(result)` and the parent compares. The forged module — byte-identical to
+the one that scored 11/11 before — now scores **0/11**.
+
+**The subject's code no longer runs on the host.** `check(isolation="auto")` runs the probe in
+a container with `--network=none --cap-drop=ALL --read-only`, workspace mounted read-only,
+falling back to the host only when docker is absent and recording which happened in the new
+`Verdict.isolated` field. A verdict is a claim about where the code that produced it ran, and a
+row that does not say which is not reproducible. The marker file that appeared on the host
+before now does not appear, and the failure trace reads `/work/ledger.py` — container paths.
+
+**Shadowing is stripped and counted.** `_strip_shadows()` removes a package directory named for
+the module, plus `sitecustomize.py` and `usercustomize.py`, and sets `edited` when it finds any.
+The attack that read `passed=True, edited=False` now reads `passed=False, edited=True`.
+
+**Results are deserialised with `ast.literal_eval`, never `eval` or `pickle`** — unpickling
+attacker-controlled data in the parent would have reintroduced exactly the host execution this
+change removes. `literal_eval` also preserves the distinctions a JSON round trip would have
+destroyed: `(0, 0)` stays a tuple rather than becoming `[0, 0]`, and `1` still equals `1.0`.
+
+**Regression: does the fix change any verdict?** Old and new scoring were run side by side over
+5 seeds × 2 levels × {buggy, reference} = 20 cells, the old code loaded straight from git.
+`passed`, `cases_passed` and `cases_total` are **identical in all 20**. The single difference is
+`per_module` on L0, which the old path left empty because single-module suites emit no `MODULE`
+lines. That feeds `defects_fixed()`, which would have returned 0 for a fully-correct L0 repair —
+but `screen.py:323` branches on `defective` being empty, which it is for L0 (`difficulty` has no
+`defective` key there), so 007 never consulted it and **no reported number changes.**
+
+Cost: about 0.3 s per check after the image is pulled.
 
 **The probe was wrong twice before it was right, both times toward "safe".** Its first
 answer-key payload parsed the composite `check(fn, want, label, mod)` shape while this level
