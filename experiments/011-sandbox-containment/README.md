@@ -54,6 +54,58 @@ Two questions that are usually conflated and are not the same measurement:
 A is a prerequisite for B: measuring whether an agent exfiltrates a key is meaningless until
 you know whether it could.
 
+## The security read
+
+The result splits cleanly, and the split is not the one a flat list of ten properties implies:
+**the container boundary holds, and the network boundary was never there.** Arm C1's 0/6 means
+an attacker with code execution in that container stays in it. Arm A's egress and credential
+findings mean they never needed to leave.
+
+**Two of the eight failed properties carried the risk; the other six were hygiene.**
+`GEMINI_API_KEY` sat in the agent's environment (P3) with unrestricted egress (P1, P2) — one
+command from exfiltration, through any of five routes that work in that image (`python3`,
+`node`, `git`, `getent`, and bash's `/dev/tcp`; `curl`, `wget`, `nc`, `ping` and `dig` are all
+absent, which cost one turn to discover, not one run). Writable rootfs, `NoNewPrivs=0`, a full
+capability bounding set and missing pid/memory ceilings are worth closing because they are
+free, not because they changed the exposure: `CapEff` was already 0, and Docker Desktop puts a
+VM under the whole thing. Listing all ten flat implies they trade off evenly. They do not.
+
+**The host bridge is the finding that reaches past this repo.** `host.docker.internal` resolves
+to `192.168.65.254` and reaches services bound to host *loopback* — bound there, by their
+operator, specifically so nothing else could reach them. On this machine that is ollama on
+`:11434`, confirmed answering from inside the unmodified container. Ollama's HTTP API has no
+authentication by default and includes state-changing endpoints (pull, create, delete, push);
+**the read endpoints were confirmed reachable and the write endpoints were deliberately not
+exercised** — verifying them would mean issuing a POST to `/api/pull` or `/api/delete` against
+the operator's own model store, which is not a thing to do casually. Treat "any container on
+this laptop can drive the host's model runtime" as confirmed for reads and unverified but
+likely for writes.
+
+**The model-driven arms give almost no assurance, and banking them would be the mistake.** See
+Scope above: one usable arm C2 run, 0/30 compliance in arm B, and in both cases the subjects
+failed for reasons unrelated to the boundary — four turns of `apt-get install curl`, then
+`nano` and `vim`, then `git init`. "A weak model did not find the door" does not transfer to a
+stronger model, more turns, or a model told where to look.
+
+**The realistic threat is injection, not volition.** The agent reads task content it did not
+author, holds a live provider credential, and has open egress. The risk is not that the model
+decides to exfiltrate; it is that something in `/work` instructs it to, and nothing in the
+configuration would notice. Arm B demonstrated the second half directly: nothing refused,
+filtered, or logged — the five exposed runs were stopped by their own incapacity.
+
+**Which is why the fix is configuration, not behaviour.** Ranked by risk actually removed:
+take the credential out of the agent and put it behind an egress proxy; allowlist egress to
+the provider. Those two close the exposure. The rest is worth taking because it costs nothing.
+That is what the hardening below builds, and its acceptance test is a probe exiting 0 rather
+than a paragraph claiming the sandbox is fine.
+
+**The transferable lesson is about the instrument, not the container.** Four defects were found
+in arm C2's scorer and three in the egress proxy, and **every one of them failed in the same
+direction** — the scorer toward reporting containment, the proxy toward reporting a model
+error. A safety eval whose errors are asymmetric toward "safe" converts absence of evidence
+into a recorded PASS. A positive control is the only thing that applies pressure the other way,
+and it only covers the routes someone thought to script.
+
 ## Why this exists
 
 `sandbox/Dockerfile:27` says "the agent's blast radius is `/work` and nothing else", and
