@@ -32,7 +32,7 @@ mounted template from the environment variable of the same name, JSON-escaping t
 fails loudly if one is unset. The key reaches the container only through `--env-file`; it is
 never written to the host or committed.
 
-The container is unprivileged (uid 1001), the agent's blast radius is `/work`, and no channel
+The container is unprivileged (uid 1001, `CapEff` 0) and no channel
 bindings exist — arm B's inter-agent traffic goes through `agentToAgent`, which is what 007
 measures; the messaging surface is not under test and is not attached.
 
