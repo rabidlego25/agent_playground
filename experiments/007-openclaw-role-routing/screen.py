@@ -107,6 +107,53 @@ def prepare(n: int = N, seed0: int = SEED0, level: str = "L0") -> list[dict]:
     return manifest
 
 
+EGRESS_NETWORK = "openclaw-egress"       # --internal: no route off the machine
+PROXY_IMAGE = "openclaw-proxy-007"
+PROXY_NAME = "openclaw-proxy"
+PROXY_PORT = 8080
+PIDS_LIMIT = 256
+MEMORY_LIMIT = "2g"
+
+
+def ensure_egress_network() -> None:
+    """Create the internal network if it is absent. Idempotent, and deliberately called
+    from `docker_flags()` rather than left to each caller: a flag list naming a network
+    that does not exist fails at `docker run`, and the whole point of this function being
+    the single source is that no caller can get a different sandbox than the screen."""
+    have = subprocess.run(["docker", "network", "inspect", EGRESS_NETWORK],
+                          capture_output=True)
+    if have.returncode != 0:
+        subprocess.run(["docker", "network", "create", "--internal", EGRESS_NETWORK],
+                       capture_output=True, check=True)
+
+
+def ensure_proxy() -> None:
+    """Start the egress proxy if it is not already up, on both networks.
+
+    It is the only container with a route off the machine and the only one holding the
+    provider credential -- which is why `--env-file` appears here and no longer in
+    `docker_flags()`. Attached to the internal network so the agent can reach it by name,
+    and to the default bridge so it can reach the provider.
+    """
+    ensure_egress_network()
+    running = subprocess.run(["docker", "inspect", "-f", "{{.State.Running}}", PROXY_NAME],
+                             capture_output=True, text=True)
+    if running.stdout.strip() == "true":
+        return
+    subprocess.run(["docker", "rm", "-f", PROXY_NAME], capture_output=True)
+    subprocess.run([
+        "docker", "run", "-d", "--name", PROXY_NAME,
+        "--network", EGRESS_NETWORK,
+        "--env-file", str(ENV_FILE),
+        "--cap-drop=ALL", "--security-opt", "no-new-privileges", "--read-only",
+        "--pids-limit", "64", "--memory", "256m",
+        PROXY_IMAGE,
+    ], capture_output=True, check=True)
+    # Second attachment: the internal network cannot reach the provider by itself.
+    subprocess.run(["docker", "network", "connect", "bridge", PROXY_NAME],
+                   capture_output=True, check=True)
+
+
 def docker_flags(ws: Path, state: Path, template: str) -> list[str]:
     """The container invocation, as one list, so it can be tested rather than copied.
 
@@ -114,10 +161,33 @@ def docker_flags(ws: Path, state: Path, template: str) -> list[str]:
     against these exact flags. A probe that re-declares the flag list tests a fiction:
     the list drifts, the probe keeps passing, and the sandbox it certifies is not the one
     the screen runs. Everything in this list is isolation; everything after it is workload.
+
+    **Hardened 2026-09-14, after 011 measured the previous version at 2 of 10 containment
+    properties holding.** Two of these flags carry the risk and the rest are hygiene:
+
+      --network EGRESS_NETWORK  an --internal network. No DNS and no route to anything
+                                except the egress proxy, which allowlists one upstream.
+      (no --env-file)           the provider credential is no longer in this container at
+                                all; it lives in the proxy. Nothing here to exfiltrate.
+
+    The remainder -- cap-drop, no-new-privileges, read-only, pids and memory ceilings --
+    close properties P6-P10, which 011 rated low-value on this machine (CapEff was already
+    0, and Docker Desktop puts a VM underneath) but which cost nothing to take.
+
+    `--read-only` needs one writable path: `entrypoint.sh` renders the config to /tmp/oc,
+    so /tmp is a tmpfs rather than a bind mount -- it dies with the container and never
+    touches the host.
     """
+    ensure_egress_network()
     return [
         "docker", "run", "--rm",
-        "--env-file", str(ENV_FILE),
+        "--network", EGRESS_NETWORK,
+        "--cap-drop=ALL",
+        "--security-opt", "no-new-privileges",
+        "--read-only",
+        "--tmpfs", "/tmp:rw,mode=1777,size=64m",
+        "--pids-limit", str(PIDS_LIMIT),
+        "--memory", MEMORY_LIMIT,
         "-v", f"{SANDBOX / 'config' / template}:/cfg/openclaw.template.json:ro",
         "-v", f"{SANDBOX / 'entrypoint.sh'}:/entrypoint.sh:ro",
         "-v", f"{ws}:/work",
@@ -169,6 +239,9 @@ def _pace(window: deque, expected: int = EXPECTED_PER_INSTANCE) -> float:
 
 def run(model: str, template: str, budget: int, timeout: int, lean: bool = False,
         n: int = N, seed0: int = SEED0, level: str = "L0") -> None:
+    # The agent container has no route anywhere except this proxy, so the screen cannot
+    # run without it. Started once per screen rather than per turn.
+    ensure_proxy()
     manifest = prepare(n, seed0, level)
     # Held-out runs get their own trace stem: TraceWriter is append-only, and mixing a
     # validation run into the tuning run's trace would make the two indistinguishable
@@ -340,7 +413,7 @@ def main() -> None:
     sub = p.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run")
     r.add_argument("--model", default="gemini/gemini-3.5-flash-lite")
-    r.add_argument("--template", default="gemini.template.json")
+    r.add_argument("--template", default="gemini-proxied.template.json")
     r.add_argument("--budget", type=int, default=DEFAULT_BUDGET)
     r.add_argument("--timeout", type=int, default=360)
     r.add_argument("--n", type=int, default=N, help="instances")
