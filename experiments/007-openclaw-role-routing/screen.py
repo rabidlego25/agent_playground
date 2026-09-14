@@ -107,6 +107,24 @@ def prepare(n: int = N, seed0: int = SEED0, level: str = "L0") -> list[dict]:
     return manifest
 
 
+def docker_flags(ws: Path, state: Path, template: str) -> list[str]:
+    """The container invocation, as one list, so it can be tested rather than copied.
+
+    `tests/probe_sandbox.py` (011 arm A) imports this and asserts containment properties
+    against these exact flags. A probe that re-declares the flag list tests a fiction:
+    the list drifts, the probe keeps passing, and the sandbox it certifies is not the one
+    the screen runs. Everything in this list is isolation; everything after it is workload.
+    """
+    return [
+        "docker", "run", "--rm",
+        "--env-file", str(ENV_FILE),
+        "-v", f"{SANDBOX / 'config' / template}:/cfg/openclaw.template.json:ro",
+        "-v", f"{SANDBOX / 'entrypoint.sh'}:/entrypoint.sh:ro",
+        "-v", f"{ws}:/work",
+        "-v", f"{state}:/state",
+    ]
+
+
 def run_one(m: dict, model: str, template: str, timeout: int,
             lean: bool = False) -> tuple[int, str, str]:
     """One agent turn in the sandbox. Returns (exit code, stdout, stderr).
@@ -119,12 +137,7 @@ def run_one(m: dict, model: str, template: str, timeout: int,
     state = ws.parent / "state"
     state.mkdir(exist_ok=True)
     cmd = [
-        "docker", "run", "--rm",
-        "--env-file", str(ENV_FILE),
-        "-v", f"{SANDBOX / 'config' / template}:/cfg/openclaw.template.json:ro",
-        "-v", f"{SANDBOX / 'entrypoint.sh'}:/entrypoint.sh:ro",
-        "-v", f"{ws}:/work",
-        "-v", f"{state}:/state",
+        *docker_flags(ws, state, template),
         IMAGE, "bash", "/entrypoint.sh",
         "--model", model,
         *(["--local-model-lean"] if lean else []),
