@@ -152,6 +152,27 @@ def ensure_proxy() -> None:
     # Second attachment: the internal network cannot reach the provider by itself.
     subprocess.run(["docker", "network", "connect", "bridge", PROXY_NAME],
                    capture_output=True, check=True)
+    _wait_for_proxy()
+
+
+def _wait_for_proxy(timeout: float = 20.0) -> None:
+    """Block until the proxy answers, rather than until the container exists.
+
+    `docker run -d` returns as soon as the container is created; python still has to import
+    and bind. A caller that starts an agent container in that window gets connection
+    refused, which surfaces as a provider error and reads like a quota or network problem.
+    Caught by tests/probe_proxy.py on its first run.
+    """
+    deadline = time.time() + timeout
+    probe = ("import socket,sys;s=socket.socket();s.settimeout(2);"
+             f"sys.exit(s.connect_ex(('{PROXY_NAME}',{PROXY_PORT})))")
+    while time.time() < deadline:
+        r = subprocess.run(["docker", "run", "--rm", "--network", EGRESS_NETWORK,
+                            IMAGE, "python3", "-c", probe], capture_output=True)
+        if r.returncode == 0:
+            return
+        time.sleep(1)
+    raise RuntimeError(f"{PROXY_NAME} did not accept connections within {timeout}s")
 
 
 def docker_flags(ws: Path, state: Path, template: str) -> list[str]:

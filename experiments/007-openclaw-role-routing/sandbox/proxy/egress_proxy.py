@@ -25,8 +25,10 @@ from __future__ import annotations
 
 import http.client
 import os
+import posixpath
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import unquote
 
 UPSTREAM_HOST = "generativelanguage.googleapis.com"
 ALLOWED_PREFIXES = ("/v1beta/openai/",)
@@ -52,6 +54,39 @@ DROP_RESPONSE_HEADERS = {
     "connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te",
     "trailers", "transfer-encoding", "upgrade", "content-encoding", "content-length",
 }
+
+
+# Anything that can change what a path *means* between this check and the upstream's
+# interpretation of it. `tests/probe_proxy.py` found the original `str.startswith` check
+# forwarding `/v1beta/openai/../../v1beta/models`: it passes a prefix test and normalises,
+# upstream, to a path the allowlist exists to exclude. Upstream answered 302 to an absolute
+# URL the agent cannot reach, so nothing came back -- but that is the provider's
+# normalisation doing the containment, not this proxy's, and a control enforced by the
+# thing it is supposed to constrain is not a control.
+_SUSPICIOUS = ("..", "//", "\\", "\x00", ";")
+
+
+def forwardable_path(raw: str) -> str | None:
+    """The path to forward, or None to refuse.
+
+    Strict by construction: the question is not "can this be made safe" but "is this
+    exactly one of the shapes we intend to allow". Anything ambiguous is refused, because
+    the cost of a false refusal here is a 403 in a log and the cost of a false accept is
+    the operator's credential spent somewhere unintended.
+    """
+    if "://" in raw:                      # an absolute-URI request line is not a path
+        return None
+    decoded = unquote(raw)
+    if unquote(decoded) != decoded:       # double-encoded: refuse rather than guess
+        return None
+    if any(t in decoded for t in _SUSPICIOUS):
+        return None
+    path = decoded.split("?", 1)[0]
+    if posixpath.normpath(path) != path:  # normalisation must be a no-op
+        return None
+    if not any(path.startswith(pre) for pre in ALLOWED_PREFIXES):
+        return None
+    return raw
 
 
 def log(*a):
@@ -85,7 +120,7 @@ class Proxy(BaseHTTPRequestHandler):
     def _handle(self):
         if self.command not in ALLOWED_METHODS:
             return self._deny(405, f"method {self.command} not allowed")
-        if not any(self.path.startswith(p) for p in ALLOWED_PREFIXES):
+        if forwardable_path(self.path) is None:
             return self._deny(403, f"path not on the allowlist: {self.path}")
 
         key = os.environ.get("GEMINI_API_KEY")
@@ -162,6 +197,17 @@ class Proxy(BaseHTTPRequestHandler):
 
     do_GET = _handle                                             # noqa: N815
     do_POST = _handle                                            # noqa: N815
+
+    def _refuse_method(self):
+        self._deny(405, f"method {self.command} not allowed")
+
+    # Explicit, because the ALLOWED_METHODS test inside _handle was unreachable for every
+    # method without a do_* handler: BaseHTTPRequestHandler answered 501 "Unsupported
+    # method" before this class saw the request. The denial was real but it came from the
+    # framework, was not logged here, and would have silently stopped being a denial the
+    # moment anyone added a handler. Found by tests/probe_proxy.py.
+    do_PUT = do_DELETE = do_PATCH = do_OPTIONS = do_TRACE = _refuse_method   # noqa: N815
+    do_HEAD = _refuse_method                                                 # noqa: N815
 
     def do_CONNECT(self):                                        # noqa: N802
         self._deny(403, "CONNECT is not proxied -- this is a reverse proxy, not a tunnel")

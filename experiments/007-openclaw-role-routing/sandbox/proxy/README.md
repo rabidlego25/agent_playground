@@ -46,11 +46,57 @@ constant.
 - **No inspection of what is sent upstream.** The allowlist is a path prefix. A request that
   puts secrets in the request body reaches the provider like any other. This proxy stops
   exfiltration to *other hosts*; it does not stop a payload aimed at the allowed one.
+- **The prefix constrains the path, and the path is all it constrains.** Anything the provider
+  serves under `/v1beta/openai/` is reachable with the operator's credential. Narrowing that to
+  the endpoints 007 actually uses (`chat/completions`, `models`) would be a strictly tighter
+  allowlist and has not been done.
 - **No rate limiting, quota accounting, or retry policy.** 007's own pacing handles that.
 - **No persistent audit trail.** ALLOW/DENY lines go to stderr and vanish with the container.
 - **No protection for the key at rest.** It arrives via `--env-file` and lives in this
   process's environment. This container is now the highest-value target in the setup; that is
   the trade, and it is why it runs with fewer capabilities than the agent does.
+
+## What the probe found
+
+`tests/probe_proxy.py` attacks the allowlist with raw HTTP from a container on the agent's own
+network, one pre-registered verdict per case. Written 2026-09-14, after this proxy had been
+verified to *work* and never once tested to see whether it could be made to do something else
+— the same posture that produced four scorer defects in 011 arm C2.
+
+**Finding 1: the path allowlist was bypassable.** `/v1beta/openai/../../v1beta/models` passes a
+`str.startswith` test on an unnormalised path and was forwarded upstream with the credential
+attached; `%2e%2e` likewise.
+
+The impact is narrower than that sounds, and it was measured rather than assumed. Eight
+traversal forms were tried and every one returned 302 or 404 — the provider normalises the path
+and answers with a redirect to an absolute URL on a host the agent cannot reach, because the
+agent's only route is this proxy. Nothing came back. **But that means the containment was being
+performed by the upstream's normalisation, not by this proxy**, and a control enforced by the
+thing it is meant to constrain is not a control. It fails the moment this proxy follows
+redirects, the provider changes behaviour, or `UPSTREAM_HOST` moves to a server that serves
+such paths directly.
+
+Fixed in `forwardable_path()`: decode once, refuse double-encoding, refuse `..` `//` `\` `;`
+and NUL, require `posixpath.normpath` to be a no-op, then test the prefix. The original request
+line is what gets forwarded, so query strings survive.
+
+**Finding 2: the method allowlist was dead code.** `ALLOWED_METHODS` is tested inside
+`_handle`, which only `do_GET` and `do_POST` route to — every other method was answered 501 by
+`BaseHTTPRequestHandler` before this class saw it. The denial was real, but it came from the
+framework, was never logged here, and would have silently stopped being a denial the moment
+someone added a handler. Now every other method has an explicit handler returning 405.
+
+**What held.** A `Content-Length` + `Transfer-Encoding: chunked` request carrying a smuggled
+second request produced two separate responses on one connection: the smuggled bytes were
+parsed as their own request and faced the allowlist again. No response body contained the
+credential. `Host` cannot redirect the upstream, a client-supplied `Authorization` is discarded
+rather than relayed, `CONNECT` is refused, and an absolute-URI request line is refused.
+
+**A defect in the probe itself, recorded because the direction is unusual.** Its first
+classifier binned every unrecognised status as "forwarded", so it reported a 501 denial and a
+malformed-never-forwarded request as allowlist failures: three surprises, two of them fiction.
+Every other instrument defect in this project failed toward reporting safety. This one cried
+wolf. Both are a probe telling you something that is not so.
 
 ## Operational notes, learned the hard way
 
@@ -58,6 +104,10 @@ Three bugs here presented as model failures — the agent reported `LLM request 
 `Stream ended without finish_reason` while the proxy logged `upstream 200 OK`. If you touch
 the relay, re-read these first:
 
+- **A container is not ready when `docker run -d` returns.** Python still has to import and
+  bind, and a caller that starts an agent container in that window gets connection refused,
+  which surfaces as a provider error and reads like a quota problem. `screen.ensure_proxy()`
+  now waits for the port to answer. Found by `probe_proxy.py` on its first run.
 - **`read1`, never `read`.** `read(n)` blocks until it has `n` bytes or the stream ends, which
   stalls every partial server-sent event until the buffer fills.
 - **Request framing.** A client may send a chunked body rather than `Content-Length`; reading
