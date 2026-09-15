@@ -57,6 +57,8 @@ import copy
 import os
 import random
 import shutil
+import functools
+import json
 import subprocess
 import sys
 import tempfile
@@ -100,6 +102,10 @@ class Verdict:
     edited: bool
     error: str | None = None
     per_module: dict[str, tuple[int, int]] = field(default_factory=dict)
+    # How the subject's code was executed. False means it ran on the host, which 011 arm E
+    # showed is a sandbox bypass: a verdict is not only a number, it is a claim about where
+    # the code that produced it ran, and a row that does not say which is not reproducible.
+    isolated: bool = False
 
     def defects_fixed(self, defective: list[str]) -> int:
         """How many of the defective groups now pass every hidden case.
@@ -118,6 +124,7 @@ class Verdict:
             "edited": self.edited,
             "error": self.error,
             "per_module": {k: list(v) for k, v in self.per_module.items()},
+            "isolated": self.isolated,
         }
 
 
@@ -144,15 +151,85 @@ class RepairWorld:
         (root / "TASK.md").write_text(self.statement)
         return root
 
-    def check(self, root: str | Path, timeout: int = 30) -> Verdict:
-        """Score the workspace. Nothing inside `root` is trusted: the hidden suite is
-        written into a copy, so an agent that edited or deleted a test cannot affect it."""
+    def _cases(self) -> list[tuple[str, Any, str, str]]:
+        """(call source, expected value, label, module) for every hidden case.
+
+        Parsed from `hidden_tests` in the *parent*, so the expected values can stay here
+        and never enter the process that runs the subject's code. Two shapes exist:
+        `check(fn(...), want, label)` for a single module and
+        `check(lambda: fn(...), want, label, module)` for a composite.
+        """
+        out: list[tuple[str, Any, str, str]] = []
+        for node in ast.walk(ast.parse(self.hidden_tests)):
+            if not (isinstance(node, ast.Call)
+                    and getattr(node.func, "id", "") == "check" and len(node.args) >= 3):
+                continue
+            call = node.args[0]
+            if isinstance(call, ast.Lambda):
+                call = call.body
+            try:
+                want = ast.literal_eval(node.args[1])
+                label = ast.literal_eval(node.args[2])
+            except ValueError:
+                continue
+            module = (ast.literal_eval(node.args[3]) if len(node.args) > 3
+                      else self.module_name)
+            out.append((ast.unparse(call), want, label, module))
+        return out
+
+    def _probe_script(self, cases: list[tuple[str, Any, str, str]]) -> str:
+        """The script that runs inside the sandbox. It contains the calls and no answers.
+
+        011 arm E: the previous design wrote the hidden suite -- expected values and all --
+        into the same directory the subject's module was imported from, so a module that
+        implemented nothing could read `_hidden.py` at import time and replay the literals.
+        It scored 11/11. Splitting the comparison out of the subject's process is the only
+        fix that survives the subject being adversarial, because anything it can compare
+        against is by definition something it can read.
+
+        Results come back as `repr` strings inside JSON. The parent re-reads them with
+        `ast.literal_eval`, never `eval` or `pickle` -- deserialising attacker-controlled
+        data with either would reintroduce the execution this change exists to remove.
+        """
+        imports = [ast.unparse(n) for n in ast.parse(self.hidden_tests).body
+                   if isinstance(n, (ast.Import, ast.ImportFrom))]
+        lines = ["import sys, json", 'sys.path.insert(0, ".")', *imports, "", "_out = []"]
+        for i, (call_src, _want, _label, _mod) in enumerate(cases):
+            lines += [
+                "try:",
+                f"    _v = repr({call_src})",
+                "except BaseException as _e:",
+                "    _v = repr(('raised', type(_e).__name__))",
+                f"_out.append([{i}, _v])",
+            ]
+        lines += ['print("RESULTS " + json.dumps(_out))']
+        return "\n".join(lines) + "\n"
+
+    def check(self, root: str | Path, timeout: int = 30,
+              isolation: str = "auto") -> Verdict:
+        """Score the workspace.
+
+        Nothing inside `root` is trusted, in two senses that 011 arm E showed were not the
+        same thing:
+
+        1. **Its contents cannot influence the verdict except by being correct.** The copy
+           drops the agent's own `test_*.py`, and anything that would shadow the module --
+           a package directory of the same name, `sitecustomize.py`, `usercustomize.py` --
+           is removed and counted as an edit. A package beats a module in the same path
+           entry, so `<module>/__init__.py` previously scored `passed=True, edited=False`.
+        2. **Its contents are not executed here.** `isolation="auto"` runs the subject's
+           code in a container with no network and no capabilities, falling back to this
+           host only when docker is absent, and saying so in `Verdict.isolated`. Before
+           this, scoring imported agent-authored Python with `sys.executable` on the host:
+           the container contained the turn and not the measurement of it.
+        """
         root = Path(root)
         src = root / f"{self.module_name}.py"
         if not src.exists():
             return Verdict(False, 0, self._case_count(), False, "module missing")
         edited = src.read_text() != self.buggy_source
 
+        cases = self._cases()
         with tempfile.TemporaryDirectory() as tmp:
             work = Path(tmp) / "work"
             # __pycache__ must not travel: a stale .pyc whose source changed by the same
@@ -162,35 +239,42 @@ class RepairWorld:
             shutil.copytree(root, work, ignore=shutil.ignore_patterns("__pycache__"))
             for stray in work.glob("test_*.py"):     # the agent's own tests do not score it
                 stray.unlink()
-            (work / "_hidden.py").write_text(self.hidden_tests)
+            shadowed = _strip_shadows(work, self.module_name)
+            edited = edited or shadowed
+
+            runner = Path(tmp) / "runner"
+            runner.mkdir()
+            (runner / "probe.py").write_text(self._probe_script(cases))
+
             try:
-                r = subprocess.run(
-                    [sys.executable, "-B", "_hidden.py"], cwd=work,
-                    capture_output=True, text=True, timeout=timeout,
-                    env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
+                r = _run_probe(work, runner, timeout, isolation)
             except subprocess.TimeoutExpired:
-                return Verdict(False, 0, self._case_count(), edited, "timeout")
+                return Verdict(False, 0, len(cases), edited, "timeout")
             except OSError as exc:
-                return Verdict(False, 0, self._case_count(), edited, str(exc))
+                return Verdict(False, 0, len(cases), edited, str(exc))
 
         tail = (r.stdout + r.stderr).strip().splitlines()
-        per: dict[str, tuple[int, int]] = {}
-        for ln in tail:
-            if ln.startswith("MODULE "):
-                try:
-                    _, m, got_m, tot_m = ln.split()
-                    per[m] = (int(got_m), int(tot_m))
-                except ValueError:
-                    pass
-        summary = next((ln for ln in reversed(tail) if ln.startswith("CASES ")), "")
+        line = next((ln for ln in reversed(tail) if ln.startswith("RESULTS ")), "")
+        if not line:
+            return Verdict(False, 0, len(cases), edited,
+                           (tail[-1] if tail else "no output")[:200], {},
+                           isolated=r.isolated)
         try:
-            _, got, total = summary.split()
-            passed_n, total_n = int(got), int(total)
-        except ValueError:
-            return Verdict(False, 0, self._case_count(), edited,
-                           (tail[-1] if tail else "no output")[:200], per)
-        return Verdict(r.returncode == 0 and passed_n == total_n,
-                       passed_n, total_n, edited, None, per)
+            got = {int(i): v for i, v in json.loads(line[len("RESULTS "):])}
+        except (ValueError, TypeError) as exc:
+            return Verdict(False, 0, len(cases), edited, f"unparsable results: {exc}",
+                           {}, isolated=r.isolated)
+
+        per: dict[str, list[int]] = {}
+        passed_n = 0
+        for i, (_call, want, label, module) in enumerate(cases):
+            p_t = per.setdefault(module, [0, 0])
+            p_t[1] += 1
+            if _matches(got.get(i), want):
+                p_t[0] += 1
+                passed_n += 1
+        return Verdict(passed_n == len(cases), passed_n, len(cases), edited, None,
+                       {k: (v[0], v[1]) for k, v in per.items()}, isolated=r.isolated)
 
     def _case_count(self) -> int:
         return self.hidden_cases
@@ -200,6 +284,95 @@ class RepairWorld:
 # Execution helpers. Cases are selected by running the code, not by hand-reasoning about
 # which mutation shows up where -- that reasoning is what silently broke the first pool.
 # --------------------------------------------------------------------------------------
+
+SCORER_IMAGE = "python:3.12-slim"
+# Files that change what `import <module>` resolves to without changing <module>.py.
+_SHADOW_FILES = ("sitecustomize.py", "usercustomize.py")
+
+
+class _ProbeResult:
+    __slots__ = ("stdout", "stderr", "isolated")
+
+    def __init__(self, stdout: str, stderr: str, isolated: bool):
+        self.stdout, self.stderr, self.isolated = stdout, stderr, isolated
+
+
+def _strip_shadows(work: Path, module_name: str) -> bool:
+    """Remove anything that would be imported in place of `module_name`. True if any was.
+
+    CPython's FileFinder checks directories before file modules in the same path entry, so
+    `<module>/__init__.py` wins over `<module>.py` while leaving the bytes `edited`
+    compares untouched. 011 arm E scored that combination `passed=True, edited=False` --
+    a row shaped exactly like an oracle bug, which is how it would have been diagnosed.
+    """
+    hit = False
+    pkg = work / module_name
+    if pkg.is_dir():
+        shutil.rmtree(pkg)
+        hit = True
+    for name in _SHADOW_FILES:
+        f = work / name
+        if f.exists():
+            f.unlink()
+            hit = True
+    return hit
+
+
+@functools.cache
+def _docker_available() -> bool:
+    try:
+        return subprocess.run(["docker", "info"], capture_output=True,
+                              timeout=20).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def _run_probe(work: Path, runner: Path, timeout: int, isolation: str) -> _ProbeResult:
+    """Execute the probe over the subject's workspace, in a container when possible.
+
+    The workspace is mounted read-only and the network is off: the subject's code runs,
+    but it cannot reach anything and cannot leave anything behind. `--network=none` is
+    available here in a way it is not for the agent's own turn, because scoring needs no
+    provider.
+    """
+    use_container = isolation == "container" or (isolation == "auto" and _docker_available())
+    if use_container:
+        cmd = [
+            "docker", "run", "--rm", "--network=none",
+            "--cap-drop=ALL", "--security-opt", "no-new-privileges", "--read-only",
+            "--pids-limit", "128", "--memory", "512m",
+            "--tmpfs", "/tmp:rw,size=16m",
+            "-v", f"{work}:/work:ro",
+            "-v", f"{runner}/probe.py:/probe.py:ro",
+            "-w", "/work",
+            "-e", "PYTHONDONTWRITEBYTECODE=1",
+            SCORER_IMAGE, "python3", "-B", "/probe.py",
+        ]
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 30)
+        return _ProbeResult(r.stdout, r.stderr, True)
+
+    r = subprocess.run(
+        [sys.executable, "-B", str(runner / "probe.py")], cwd=work,
+        capture_output=True, text=True, timeout=timeout,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
+    return _ProbeResult(r.stdout, r.stderr, False)
+
+
+def _matches(got_repr: str | None, want: Any) -> bool:
+    """Compare a reported repr against an expected value.
+
+    `ast.literal_eval` first, so `1` and `1.0` still compare equal and a tuple does not
+    silently equal a list -- a JSON round trip would have collapsed that distinction and
+    changed verdicts. Falls back to comparing the repr strings for values that are not
+    literals.
+    """
+    if got_repr is None:
+        return False
+    try:
+        return ast.literal_eval(got_repr) == want
+    except (ValueError, SyntaxError, MemoryError, TypeError):
+        return got_repr == repr(want)
+
 
 def _load(source: str, module_name: str) -> dict[str, Any]:
     ns: dict[str, Any] = {"__name__": module_name}

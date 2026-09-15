@@ -21,7 +21,19 @@ RUN npm install -g openclaw@latest
 RUN apt-get update && apt-get install -y --no-install-recommends jq \
     && rm -rf /var/lib/apt/lists/*
 
-# Unprivileged. The agent's blast radius is /work and nothing else.
+# Unprivileged: uid 1001, CapEff 0.
+#
+# The blast radius is NOT /work. Measured 2026-09-14 by tests/probe_sandbox.py (011):
+# with the flags screen.py actually uses, this container reaches arbitrary hosts and
+# DNS, carries GEMINI_API_KEY in its environment, writes to two host bind mounts
+# (/work and /state), runs on a writable rootfs with NoNewPrivs=0 and a full capability
+# bounding set, and has no pid or memory ceiling. 2 of 10 containment properties hold,
+# and both are the mounts that are supposed to be writable.
+#
+# That is acceptable for an unbilled single-operator experiment on a machine whose
+# owner is running the agent deliberately. It is not acceptable for reuse. See
+# experiments/011-sandbox-containment/README.md for the egress-proxy configuration
+# that makes `probe_sandbox.py --profile hardened` pass.
 RUN useradd -m -u 1001 agent && mkdir -p /work && chown agent:agent /work
 USER agent
 WORKDIR /work

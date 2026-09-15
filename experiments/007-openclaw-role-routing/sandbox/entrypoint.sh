@@ -23,7 +23,12 @@ src, dst = sys.argv[1], sys.argv[2]
 text = open(src).read()
 names = sorted(set(re.findall(r"__([A-Z0-9_]+)__", text)))
 if not names:
-    sys.exit(f"{src}: no __PLACEHOLDER__ found -- wrong template?")
+    # Not an error since 011: the proxied template has no placeholder because it has no
+    # secret. The credential lives in the egress proxy, and the agent's config carries a
+    # baseUrl pointing at it. A template with nothing to fill in is the goal, not a
+    # misconfiguration -- see sandbox/proxy/egress_proxy.py.
+    print(f"{src}: no placeholders (proxied config -- no credential in this container)",
+          file=sys.stderr)
 missing = [n for n in names if not os.environ.get(n)]
 if missing:
     sys.exit(f"{', '.join(missing)} not set (pass --env-file)")
