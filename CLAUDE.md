@@ -21,12 +21,28 @@ about how agents perform best in workflows. Not a product. Started 2026-08-29.
   re-analyzed without re-paying for it. Prefer replay over re-run.
 - **Provider-agnostic by default.** No vendor SDK calls scattered through experiment code — go through `lib/`.
 - **Small N, stated.** Report n and variance. A single run of an agent config is an anecdote.
+- **Check a stored baseline's provenance before reusing it.** `f035461` (2026-08-30) fixed a
+  shortcut in `multi_hop` where the gold answer was the graph root, so "walk up until you cannot"
+  scored ~1.00 without counting a hop. It quarantined two probes into `results/preshortcutfix/`
+  and missed four: `probe_distractor_load.jsonl` (250 rows), `probe_variance_floor.jsonl` (240),
+  `probe_name_scramble.jsonl` (120), `probe_order_sensitivity.jsonl` (120). These are pre-fix and
+  their accuracies are not comparable to anything run after. Signature: post-fix `multi_hop`
+  records carry an `above` key in `config.difficulty`; pre-fix records do not.
 
 ## Constraints
 
 - Machine: MacBook Pro 14" M1 Pro, 16 GB unified memory. MPS, not CUDA. Local models cap out around 7B–14B quantized.
 - Claude access is via a Pro subscription (usage-limited) — design for small, replayable sweeps rather than large fan-outs.
 - Model scope is **not** Claude-only: use whichever accessible model fits the role, and say why.
+- **Context is served at 4096 tokens unless you ask for more.** ollama 0.30.10 ignores the model
+  card and defaults `num_ctx` to 4096 — llama3.1 advertises 131,072 and is served at 1/32 of it
+  (measured 2026-09-21). No result before that date was affected: the largest local prompt on
+  file is 1,307 tokens. Any experiment that varies or depends on context **must** pass `num_ctx`
+  through `lib.models.Ollama` and record it in `config`.
+- **The practical context ceiling is ~32k, set by memory, not by the model card.** llama3.1's KV
+  cache measured 128 KiB/token, so its 131k window extrapolates to ~16 GiB on a 16 GB machine.
+  qwen2.5 at `num_ctx=32768` is 6.4 GB resident vs 5.3 GB at 4096, allocated at load. Reserving a
+  window is cheap; filling it is not — prefill runs ~190s at 30k tokens (`experiments/012-context-length/`).
 
 ## Currently available models (verified 2026-08-30)
 
