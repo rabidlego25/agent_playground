@@ -59,8 +59,18 @@ class Ollama(Backend):
 
     name = "ollama"
 
-    def __init__(self, model: str, url: str = OLLAMA_URL):
+    def __init__(self, model: str, url: str = OLLAMA_URL,
+                 num_ctx: int | None = None, timeout: int = DEFAULT_TIMEOUT):
         self.model, self.url = model, url
+        # `num_ctx` is None by default so nothing that ran before this parameter existed
+        # changes behaviour. Left unset, ollama serves its own default -- 4096 on 0.30.10,
+        # measured 2026-09-21, regardless of the model card: llama3.1 advertises 131072 and
+        # is served at 1/32 of it. An experiment that varies context MUST set this, and
+        # every trace that does records it in `config`.
+        self.num_ctx = num_ctx
+        # A 27k-token prefill takes ~171s on an M1 Pro, so the 180s module default is not a
+        # ceiling a long-context sweep can live under.
+        self.timeout = timeout
 
     def available(self, retries: int = 2) -> bool:
         # A freshly started `ollama serve` refuses connections for a second or two, so a
@@ -79,6 +89,8 @@ class Ollama(Backend):
     def complete(self, prompt, *, system=None, temperature=0.7, max_tokens=1024,
                  seed=None) -> Completion:
         opts: dict[str, Any] = {"temperature": temperature, "num_predict": max_tokens}
+        if self.num_ctx is not None:
+            opts["num_ctx"] = self.num_ctx
         if seed is not None:
             opts["seed"] = seed          # ollama honours this, so arms can be made replayable
         body = {"model": self.model, "prompt": prompt, "stream": False, "options": opts}
@@ -91,7 +103,7 @@ class Ollama(Backend):
         )
         t0 = time.perf_counter()
         try:
-            with urllib.request.urlopen(req, timeout=DEFAULT_TIMEOUT) as r:
+            with urllib.request.urlopen(req, timeout=self.timeout) as r:
                 d = json.load(r)
         except (urllib.error.URLError, OSError, ValueError) as e:
             return Completion("", self.model, latency_ms=(time.perf_counter() - t0) * 1000,

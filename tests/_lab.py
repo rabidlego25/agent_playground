@@ -52,6 +52,24 @@ def mcnemar(a: list[bool], b: list[bool]) -> tuple[int, int, float]:
     tail = sum(math.comb(n, i) for i in range(min(x, y) + 1)) / (2 ** n)
     return x, y, min(1.0, 2 * tail)
 
+def timings(raw: dict[str, Any]) -> dict[str, float]:
+    """Prefill/decode/load split, in seconds, from whatever the backend reported.
+
+    Wall-clock latency alone cannot answer a question about context length: prefill is
+    quadratic-ish in prompt length and decode is not, so a single number hides which one
+    moved. ollama reports all three in nanoseconds; backends that report nothing get an
+    empty dict and the trace simply lacks the keys.
+    """
+    out = {}
+    for src, dst in (("load_duration", "load_s"),
+                     ("prompt_eval_duration", "prefill_s"),
+                     ("eval_duration", "decode_s")):
+        v = raw.get(src)
+        if isinstance(v, (int, float)):
+            out[dst] = v / 1e9
+    return out
+
+
 @dataclass
 class Cell:
     """One condition of a probe: a set of tasks run under one configuration."""
@@ -101,7 +119,7 @@ def run_cell(backend: Backend, tasks: Iterable[Task], *, label: str, experiment:
         c = backend.complete(t.prompt, temperature=temperature, max_tokens=max_tokens, seed=s)
         ep.step(state_before=t.prompt, action=c.text, tokens_in=c.tokens_in,
                 tokens_out=c.tokens_out, latency_ms=c.latency_ms,
-                meta={"error": c.error})
+                meta={"error": c.error, **timings(c.raw)})
         choice, fmt_ok = t.parse(c.text)
         ok = False if c.error else t.scored(c.text)
         ep.steps[-1].meta["format_ok"] = fmt_ok
